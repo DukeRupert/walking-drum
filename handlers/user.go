@@ -52,26 +52,25 @@ type UserResponse struct {
 }
 
 // Helper functions
+func (h *UserHandler) modelToResponse(user *models.User) (UserResponse, error) {
+    response := UserResponse{
+        ID:        user.ID,
+        Email:     user.Email,
+        Name:      user.Name,
+        CreatedAt: user.CreatedAt.Format(http.TimeFormat),
+        UpdatedAt: user.UpdatedAt.Format(http.TimeFormat),
+        IsActive:  user.IsActive,
+    }
 
-func (h *UserHandler) modelToResponse(user *models.User) UserResponse {
-	response := UserResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		CreatedAt: user.CreatedAt.Format(http.TimeFormat),
-		UpdatedAt: user.UpdatedAt.Format(http.TimeFormat),
-		IsActive:  user.IsActive,
-	}
+    if user.StripeCustomerID != nil {
+        response.StripeCustomerID = user.StripeCustomerID
+    }
 
-	if user.StripeCustomerID != nil {
-		response.StripeCustomerID = user.StripeCustomerID
-	}
+    if user.Metadata != nil {
+        response.Metadata = *user.Metadata
+    }
 
-	if user.Metadata != nil {
-		response.Metadata = *user.Metadata
-	}
-
-	return response
+    return response, nil
 }
 
 func (h *UserHandler) hashPassword(password string) (string, error) {

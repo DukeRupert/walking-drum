@@ -52,30 +52,28 @@ type ProductResponse struct {
 }
 
 // Helper functions
+func (h *ProductHandler) modelToResponse(product *models.Product) (ProductResponse, error) {
+    response := ProductResponse{
+        ID:          product.ID,
+        Name:        product.Name,
+        Description: product.Description,
+        IsActive:    product.IsActive,
+        CreatedAt:   product.CreatedAt.Format(http.TimeFormat),
+        UpdatedAt:   product.UpdatedAt.Format(http.TimeFormat),
+    }
 
-func (h *ProductHandler) modelToResponse(product *models.Product) ProductResponse {
-	response := ProductResponse{
-		ID:          product.ID,
-		Name:        product.Name,
-		Description: product.Description,
-		IsActive:    product.IsActive,
-		CreatedAt:   product.CreatedAt.Format(http.TimeFormat),
-		UpdatedAt:   product.UpdatedAt.Format(http.TimeFormat),
-	}
+    if product.StripeProductID != nil {
+        response.StripeProductID = product.StripeProductID
+    }
 
-	if product.StripeProductID != nil {
-		response.StripeProductID = product.StripeProductID
-	}
+    if product.Metadata != nil {
+        response.Metadata = *product.Metadata
+    }
 
-	if product.Metadata != nil {
-		response.Metadata = *product.Metadata
-	}
-
-	return response
+    return response, nil
 }
 
 // Handlers
-
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	var req CreateProductRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

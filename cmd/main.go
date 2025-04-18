@@ -62,11 +62,12 @@ func main() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
 	productRepo := repository.NewProductRepository(db)
-
+	priceRepo := repository.NewPriceRepository(db)
 
 	// Initialize handlers
 	userHandler := handlers.NewUserHandler(userRepo)
 	productHandler := handlers.NewProductHandler(productRepo)
+	priceHandler := handlers.NewPriceHandler(priceRepo, productRepo)
 
 	// Set up router
 	router := mux.NewRouter()
@@ -85,6 +86,13 @@ func main() {
 	apiRouter.HandleFunc("/products/{id}", productHandler.GetProduct).Methods("GET")
 	apiRouter.HandleFunc("/products/{id}", productHandler.UpdateProduct).Methods("PUT")
 	apiRouter.HandleFunc("/products/{id}", productHandler.DeleteProduct).Methods("DELETE")
+
+	// Register price routes
+	apiRouter.HandleFunc("/prices", priceHandler.CreatePrice).Methods("POST")
+	apiRouter.HandleFunc("/prices", priceHandler.ListPrices).Methods("GET")
+	apiRouter.HandleFunc("/prices/{id}", priceHandler.GetPrice).Methods("GET")
+	apiRouter.HandleFunc("/prices/{id}", priceHandler.UpdatePrice).Methods("PUT")
+	apiRouter.HandleFunc("/prices/{id}", priceHandler.DeletePrice).Methods("DELETE")
 
 	// Use the router
 	http.Handle("/", router)
