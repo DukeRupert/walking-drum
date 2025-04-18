@@ -1,11 +1,13 @@
-module github.com/dukerueprt/walking-drum
+module github.com/dukerupert/walking-drum
 
 go 1.23.8
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
 	github.com/pressly/goose/v3 v3.24.2
+	golang.org/x/crypto v0.36.0
 )
 
 require (
