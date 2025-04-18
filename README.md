@@ -18,11 +18,11 @@ Key features include:
 ## Development Roadmap
 
 ## Phase 1: Foundation & Database Setup
-- [ ] Define database schema for core entities (Users, Products, Orders, Subscriptions)
-- [ ] Create PostgreSQL migrations for initial schema
-- [ ] Set up database connection handling in Golang
-- [ ] Implement basic data models in Go
-- [ ] Create database seeding for development environment
+- [x] Define database schema for core entities (Users, Products, Orders, Subscriptions)
+- [x] Create PostgreSQL migrations for initial schema
+- [x] Set up database connection handling in Golang
+- [x] Implement basic data models in Go
+- [x] Create database seeding for development environment
 
 ## Phase 2: Core Backend Features
 - [ ] Implement user authentication and authorization
