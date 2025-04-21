@@ -67,6 +67,8 @@ func main() {
 	invoiceRepo := repository.NewInvoiceRepository(db)
 	cartRepo := repository.NewCartRepository(db)
 	cartItemRepo := repository.NewCartItemRepository(db)
+	orderRepo := repository.NewOrderRepository(db)
+	orderItemRepo := repository.NewOrderItemRepository(db)
 
 	// Initialize handlers
 	userHandler := handlers.NewUserHandler(userRepo)
@@ -75,9 +77,23 @@ func main() {
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionRepo, userRepo, priceRepo)
 	invoiceHandler := handlers.NewInvoiceHandler(invoiceRepo, userRepo, subscriptionRepo)
 	cartHandler := handlers.NewCartHandler(cartRepo, cartItemRepo, productRepo, priceRepo)
+	orderHandler := handlers.NewOrderHandler(
+		orderRepo,
+		orderItemRepo,
+		cartRepo,
+		cartItemRepo,
+		userRepo,
+		productRepo,
+		priceRepo,
+		subscriptionRepo,
+	)
 
 	// Set up router
 	router := mux.NewRouter()
+
+	// Use the router
+	http.Handle("/", router)
+
 	apiRouter := router.PathPrefix("/api").Subrouter()
 
 	// Register user routes
@@ -129,8 +145,14 @@ func main() {
 	apiRouter.HandleFunc("/carts/{id}", cartHandler.DeleteCart).Methods("DELETE")
 	apiRouter.HandleFunc("/carts/clean-expired", cartHandler.CleanExpiredCarts).Methods("POST")
 
-	// Use the router
-	http.Handle("/", router)
+	// Register order routes
+	apiRouter.HandleFunc("/orders", orderHandler.CreateOrder).Methods("POST")
+	apiRouter.HandleFunc("/orders", orderHandler.ListOrders).Methods("GET")
+	apiRouter.HandleFunc("/orders/{id}", orderHandler.GetOrder).Methods("GET")
+	apiRouter.HandleFunc("/orders/{id}", orderHandler.UpdateOrder).Methods("PUT")
+	apiRouter.HandleFunc("/orders/{id}/cancel", orderHandler.CancelOrder).Methods("POST")
+	apiRouter.HandleFunc("/orders/{id}", orderHandler.DeleteOrder).Methods("DELETE")
+	apiRouter.HandleFunc("/users/{user_id}/orders", orderHandler.ListUserOrders).Methods("GET")
 
 	// Start the HTTP server
 	port := "8080"
