@@ -53,24 +53,24 @@ type ProductResponse struct {
 
 // Helper functions
 func (h *ProductHandler) modelToResponse(product *models.Product) (ProductResponse, error) {
-    response := ProductResponse{
-        ID:          product.ID,
-        Name:        product.Name,
-        Description: product.Description,
-        IsActive:    product.IsActive,
-        CreatedAt:   product.CreatedAt.Format(http.TimeFormat),
-        UpdatedAt:   product.UpdatedAt.Format(http.TimeFormat),
-    }
+	response := ProductResponse{
+		ID:          product.ID,
+		Name:        product.Name,
+		Description: product.Description,
+		IsActive:    product.IsActive,
+		CreatedAt:   product.CreatedAt.Format(http.TimeFormat),
+		UpdatedAt:   product.UpdatedAt.Format(http.TimeFormat),
+	}
 
-    if product.StripeProductID != nil {
-        response.StripeProductID = product.StripeProductID
-    }
+	if product.StripeProductID != nil {
+		response.StripeProductID = product.StripeProductID
+	}
 
-    if product.Metadata != nil {
-        response.Metadata = *product.Metadata
-    }
+	if product.Metadata != nil {
+		response.Metadata = *product.Metadata
+	}
 
-    return response, nil
+	return response, nil
 }
 
 // Handlers
@@ -107,7 +107,12 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := h.modelToResponse(product)
+	response, err := h.modelToResponse(product)
+	if err != nil {
+		http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
@@ -131,7 +136,12 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := h.modelToResponse(product)
+	response, err := h.modelToResponse(product)
+	if err != nil {
+		http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -189,7 +199,11 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := h.modelToResponse(product)
+	response, err := h.modelToResponse(product)
+	if err != nil {
+		http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -255,7 +269,12 @@ func (h *ProductHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	// Convert to response objects
 	var responses []ProductResponse
 	for _, product := range products {
-		responses = append(responses, h.modelToResponse(product))
+		response, err := h.modelToResponse(product)
+		if err != nil {
+			http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		responses = append(responses, response)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

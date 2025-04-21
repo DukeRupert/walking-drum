@@ -120,7 +120,12 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := h.modelToResponse(user)
+	response, err := h.modelToResponse(user)
+	if err != nil {
+		http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
@@ -144,7 +149,12 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := h.modelToResponse(user)
+	response, err := h.modelToResponse(user)
+	if err != nil {
+		http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -207,7 +217,12 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := h.modelToResponse(user)
+	response, err := h.modelToResponse(user)
+	if err != nil {
+		http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -260,11 +275,16 @@ func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to list users", http.StatusInternalServerError)
 		return
 	}
-
+	
 	// Convert to response objects
 	var responses []UserResponse
 	for _, user := range users {
-		responses = append(responses, h.modelToResponse(user))
+		response, err := h.modelToResponse(user)
+		if err != nil {
+			http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		responses = append(responses, response)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
