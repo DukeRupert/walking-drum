@@ -23,6 +23,7 @@ type SubscriptionService struct {
 	subscriptionRepo repository.SubscriptionRepository
 	userRepo         repository.UserRepository
 	priceRepo        repository.PriceRepository
+    productRepo     repository.ProductRepository
 	invoiceRepo 	repository.InvoiceRepository
 }
 
@@ -32,6 +33,7 @@ func NewSubscriptionService(
 	subscriptionRepo repository.SubscriptionRepository,
 	userRepo repository.UserRepository,
 	priceRepo repository.PriceRepository,
+    productRepo repository.ProductRepository,
 	invoiceRepo repository.InvoiceRepository,
 ) *SubscriptionService {
 	return &SubscriptionService{
@@ -39,6 +41,7 @@ func NewSubscriptionService(
 		subscriptionRepo: subscriptionRepo,
 		userRepo:         userRepo,
 		priceRepo:        priceRepo,
+        productRepo:        productRepo,
 		invoiceRepo: invoiceRepo,
 	}
 }
@@ -62,26 +65,16 @@ func (s *SubscriptionService) CreateSubscription(req CreateSubscriptionRequest) 
         return nil, fmt.Errorf("failed to sync user with Stripe: %w", err)
     }
     
-    // No need to fetch the user again since we have the customer ID
-    // Just verify that the customer ID is valid
-    if customerID == "" {
-        return nil, errors.New("failed to obtain valid Stripe customer ID")
-    }
-
-    // Fetch the price to get the Stripe price ID
-    price, err := s.priceRepo.GetByID(context.Background(), req.PriceID)
+    // Sync the price with Stripe
+    stripePriceID, err := s.SyncPriceWithStripe(req.PriceID)
     if err != nil {
-        return nil, err
+        return nil, fmt.Errorf("failed to sync price with Stripe: %w", err)
     }
-
-    if price.StripePriceID == nil {
-        return nil, errors.New("price does not have a Stripe price ID")
-    }
-
+    
     // Create the payment processor request
     processorReq := payment.SubscriptionRequest{
-        CustomerID:      customerID, // Use the customer ID returned by SyncUserWithStripe
-        PriceID:         *price.StripePriceID,
+        CustomerID:      customerID,
+        PriceID:         stripePriceID,
         Quantity:        int64(req.Quantity),
         PaymentMethodID: req.PaymentMethodID,
         Description:     req.Description,
@@ -610,4 +603,135 @@ func (s *SubscriptionService) SyncUserWithStripe(userID uuid.UUID) (string, erro
         Msg("Updated user with Stripe customer ID")
     
     return customerID, nil
+}
+
+func (s *SubscriptionService) SyncPriceWithStripe(priceID uuid.UUID) (string, error) {
+    log.Debug().Str("price_id", priceID.String()).Msg("Starting SyncPriceWithStripe")
+    
+    // Get the price
+    price, err := s.priceRepo.GetByID(context.Background(), priceID)
+    if err != nil {
+        log.Error().Err(err).Str("price_id", priceID.String()).Msg("Failed to get price")
+        return "", err
+    }
+    
+    log.Debug().
+        Str("price_id", priceID.String()).
+        Int64("amount", price.Amount).
+        Str("currency", price.Currency).
+        Msg("Found price")
+    
+    // If price already has a Stripe price ID and it's valid, return it
+    if price.StripePriceID != nil && *price.StripePriceID != "" {
+        // Check if the ID starts with "price_" which is the Stripe prefix for prices
+        if strings.HasPrefix(*price.StripePriceID, "price_") {
+            log.Debug().
+                Str("price_id", priceID.String()).
+                Str("stripe_price_id", *price.StripePriceID).
+                Msg("Price already has a Stripe price ID")
+            
+            // Try to retrieve the price from Stripe to verify it exists
+            params := &stripe.PriceParams{}
+            _, err := s.processor.RetrievePrice(*price.StripePriceID, params)
+            if err == nil {
+                log.Debug().
+                    Str("price_id", priceID.String()).
+                    Str("stripe_price_id", *price.StripePriceID).
+                    Msg("Verified price exists in Stripe")
+                return *price.StripePriceID, nil
+            }
+            
+            log.Warn().
+                Err(err).
+                Str("price_id", priceID.String()).
+                Str("stripe_price_id", *price.StripePriceID).
+                Msg("Price ID exists in database but not in Stripe, creating new one")
+        } else {
+            log.Warn().
+                Str("price_id", priceID.String()).
+                Str("stripe_price_id", *price.StripePriceID).
+                Msg("Price has invalid Stripe price ID format, creating new one")
+        }
+    } else {
+        log.Debug().
+            Str("price_id", priceID.String()).
+            Msg("Price does not have a Stripe price ID, creating one")
+    }
+    
+    // Get the product
+    product, err := s.productRepo.GetByID(context.Background(), price.ProductID)
+    if err != nil {
+        log.Error().Err(err).Str("product_id", price.ProductID.String()).Msg("Failed to get product")
+        return "", err
+    }
+    
+    // Check if product has Stripe ID, if not, use name
+    productIDForStripe := product.Name
+    if product.StripeProductID != nil && *product.StripeProductID != "" {
+        productIDForStripe = *product.StripeProductID
+    }
+    
+    // Create price request
+priceReq := payment.PriceRequest{
+    ProductID:     productIDForStripe,
+    UnitAmount:    price.Amount,
+    Currency:      price.Currency,
+    Recurring:     price.IntervalType != "",
+    Metadata: map[string]string{
+        "price_id":    price.ID.String(),
+        "product_id":  product.ID.String(),
+    },
+}
+
+// Set nickname based on availability
+if price.Nickname != nil {
+    priceReq.Nickname = *price.Nickname
+} else {
+    priceReq.Nickname = product.Name
+}
+    
+    // Set recurring details if applicable
+    if priceReq.Recurring {
+        priceReq.IntervalType = string(price.IntervalType)
+        priceReq.IntervalCount = int64(price.IntervalCount)
+    }
+    
+    log.Debug().
+        Str("price_id", priceID.String()).
+        Str("product_id", productIDForStripe).
+        Int64("amount", price.Amount).
+        Msg("Creating new Stripe price")
+    
+    stripePriceID, err := s.processor.CreatePrice(priceReq)
+    if err != nil {
+        log.Error().
+            Err(err).
+            Str("price_id", priceID.String()).
+            Msg("Failed to create Stripe price")
+        return "", err
+    }
+    
+    log.Info().
+        Str("price_id", priceID.String()).
+        Str("stripe_price_id", stripePriceID).
+        Msg("Successfully created Stripe price")
+    
+    // Update the price with the new Stripe price ID
+    price.StripePriceID = &stripePriceID
+    err = s.priceRepo.Update(context.Background(), price)
+    if err != nil {
+        log.Error().
+            Err(err).
+            Str("price_id", priceID.String()).
+            Str("stripe_price_id", stripePriceID).
+            Msg("Failed to update price with Stripe price ID")
+        return "", err
+    }
+    
+    log.Debug().
+        Str("price_id", priceID.String()).
+        Str("stripe_price_id", stripePriceID).
+        Msg("Updated price with Stripe price ID")
+    
+    return stripePriceID, nil
 }

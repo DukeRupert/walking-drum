@@ -12,6 +12,17 @@ type SubscriptionRequest struct {
 	Metadata        map[string]string
 }
 
+type PriceRequest struct {
+    ProductID      string
+    UnitAmount     int64
+    Currency       string
+    Recurring      bool
+    IntervalType   string // "day", "week", "month", "year"
+    IntervalCount  int64
+    Nickname       string
+    Metadata       map[string]string
+}
+
 // SubscriptionResponse represents a generic subscription response
 type SubscriptionResponse struct {
 	ID                 string
@@ -35,6 +46,10 @@ type Processor interface {
 	// Customer operations
 	CreateCustomer(request CustomerRequest) (string, error)
 	RetrieveCustomer(customerID string, params interface{}) (interface{}, error)
+
+	// Price operations
+	CreatePrice(request PriceRequest) (string, error)
+    RetrievePrice(priceID string, params interface{}) (interface{}, error)
 	
 	// Webhook handling
 	HandleWebhook(body []byte, signature string) (interface{}, error)

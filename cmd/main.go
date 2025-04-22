@@ -111,6 +111,7 @@ func main() {
 		subscriptionRepo,
 		userRepo,
 		priceRepo,
+		productRepo,
 		invoiceRepo,
 	)
 

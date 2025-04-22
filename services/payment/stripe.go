@@ -4,12 +4,15 @@ package payment
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
-	"github.com/stripe/stripe-go/v74/customer"
 	"github.com/stripe/stripe-go/v74"
 	"github.com/stripe/stripe-go/v74/client"
+	"github.com/stripe/stripe-go/v74/customer"
+	"github.com/stripe/stripe-go/v74/product"
+	"github.com/stripe/stripe-go/v74/price"
 	"github.com/stripe/stripe-go/v74/subscription"
 	"github.com/stripe/stripe-go/v74/webhook"
 )
@@ -276,6 +279,72 @@ func (p *StripeProcessor) RetrieveCustomer(customerID string, params interface{}
     }
     
     return customer.Get(customerID, customerParams)
+}
+
+func (p *StripeProcessor) CreatePrice(request PriceRequest) (string, error) {
+    // First, check if we need to create the product
+    productID := request.ProductID
+    
+    // If product doesn't exist and isn't a Stripe ID, create it
+    if !strings.HasPrefix(productID, "prod_") {
+        // Create a product first
+        productParams := &stripe.ProductParams{
+            Name: stripe.String(productID), // Use the provided ID as name
+            Type: stripe.String("service"),
+        }
+        
+        for k, v := range request.Metadata {
+            productParams.AddMetadata(k, v)
+        }
+        
+        product, err := product.New(productParams)
+        if err != nil {
+            return "", fmt.Errorf("failed to create product: %w", err)
+        }
+        
+        productID = product.ID
+    }
+    
+    // Now create the price
+    params := &stripe.PriceParams{
+        Product:    stripe.String(productID),
+        UnitAmount: stripe.Int64(request.UnitAmount),
+        Currency:   stripe.String(request.Currency),
+    }
+    
+    if request.Nickname != "" {
+        params.Nickname = stripe.String(request.Nickname)
+    }
+    
+    // Add metadata
+    for k, v := range request.Metadata {
+        params.AddMetadata(k, v)
+    }
+    
+    // Set up recurring if needed
+    if request.Recurring {
+        params.Recurring = &stripe.PriceRecurringParams{
+            Interval:      stripe.String(request.IntervalType),
+            IntervalCount: stripe.Int64(request.IntervalCount),
+        }
+    }
+    
+    price, err := price.New(params)
+    if err != nil {
+        return "", err
+    }
+    
+    return price.ID, nil
+}
+
+func (p *StripeProcessor) RetrievePrice(priceID string, params interface{}) (interface{}, error) {
+    // Assert params to the correct type
+    priceParams, ok := params.(*stripe.PriceParams)
+    if !ok {
+        priceParams = &stripe.PriceParams{}
+    }
+    
+    return price.Get(priceID, priceParams)
 }
 
 // HandleWebhook processes Stripe webhooks
