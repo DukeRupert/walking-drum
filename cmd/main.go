@@ -14,6 +14,8 @@ import (
 
 	"github.com/dukerupert/walking-drum/handlers"
 	"github.com/dukerupert/walking-drum/repository"
+	"github.com/dukerupert/walking-drum/services"
+	"github.com/dukerupert/walking-drum/services/payment"
 )
 
 //go:embed migrations/*.sql
@@ -34,6 +36,7 @@ func main() {
 
 	// Connect to the database
 	db, err := sql.Open("postgres", dbConnectionString)
+	// log.Println(fmt.Sprintf("dbstring: %s", dbConnectionString))
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -74,7 +77,6 @@ func main() {
 	userHandler := handlers.NewUserHandler(userRepo)
 	productHandler := handlers.NewProductHandler(productRepo)
 	priceHandler := handlers.NewPriceHandler(priceRepo, productRepo)
-	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionRepo, userRepo, priceRepo)
 	invoiceHandler := handlers.NewInvoiceHandler(invoiceRepo, userRepo, subscriptionRepo)
 	cartHandler := handlers.NewCartHandler(cartRepo, cartItemRepo, productRepo, priceRepo)
 	orderHandler := handlers.NewOrderHandler(
@@ -87,6 +89,21 @@ func main() {
 		priceRepo,
 		subscriptionRepo,
 	)
+
+	// Initialize payment processor
+	paymentProcessor := payment.NewStripeProcessor()
+
+	// Initialize subscription service
+	subscriptionService := services.NewSubscriptionService(
+		paymentProcessor,
+		subscriptionRepo,
+		userRepo,
+		priceRepo,
+		invoiceRepo,
+	)
+
+	// Initialize subscription handler
+	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
 
 	// Set up router
 	router := mux.NewRouter()
@@ -119,11 +136,7 @@ func main() {
 
 	// Register subscription routes
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
-	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.ListSubscriptions).Methods("GET")
-	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.GetSubscription).Methods("GET")
-	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.UpdateSubscription).Methods("PUT")
 	apiRouter.HandleFunc("/subscriptions/{id}/cancel", subscriptionHandler.CancelSubscription).Methods("POST")
-	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.DeleteSubscription).Methods("DELETE")
 
 	// Register invoice routes
 	apiRouter.HandleFunc("/invoices", invoiceHandler.CreateInvoice).Methods("POST")
@@ -153,6 +166,11 @@ func main() {
 	apiRouter.HandleFunc("/orders/{id}/cancel", orderHandler.CancelOrder).Methods("POST")
 	apiRouter.HandleFunc("/orders/{id}", orderHandler.DeleteOrder).Methods("DELETE")
 	apiRouter.HandleFunc("/users/{user_id}/orders", orderHandler.ListUserOrders).Methods("GET")
+
+	// Register subscription routes
+	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
+	apiRouter.HandleFunc("/subscriptions/{id}/cancel", subscriptionHandler.CancelSubscription).Methods("POST")
+	apiRouter.HandleFunc("/webhooks/payment", subscriptionHandler.HandleWebhook).Methods("POST")
 
 	// Start the HTTP server
 	port := "8080"

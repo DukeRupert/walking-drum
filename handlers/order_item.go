@@ -217,13 +217,11 @@ func (h *OrderHandler) orderItemToResponse(ctx context.Context, item *models.Ord
 
 	// Include subscription details if available
 	if item.SubscriptionID != nil {
-		subscription, err := h.subscriptionRepo.GetByID(ctx, *item.SubscriptionID)
+		subscription, err := h.subscriptionRepo.GetByID(context.Background(), *item.SubscriptionID)
 		if err == nil {
-			subscriptionHandler := NewSubscriptionHandler(h.subscriptionRepo, h.userRepo, h.priceRepo)
-			subscriptionResponse, err := subscriptionHandler.modelToResponse(subscription, false)
-			if err == nil {
-				response.Subscription = &subscriptionResponse
-			}
+			// Convert subscription model to response type
+			subscriptionResponse := formatSubscriptionResponse(subscription)
+			response.Subscription = &subscriptionResponse
 		}
 	}
 

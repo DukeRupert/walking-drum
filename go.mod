@@ -7,6 +7,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
 	github.com/pressly/goose/v3 v3.24.2
+	github.com/stripe/stripe-go/v74 v74.30.0
 	golang.org/x/crypto v0.36.0
 )
 

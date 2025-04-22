@@ -138,16 +138,58 @@ func (h *InvoiceHandler) modelToResponse(invoice *models.Invoice, includeRelatio
 		if invoice.SubscriptionID != nil {
 			subscription, err := h.subscriptionRepo.GetByID(context.Background(), *invoice.SubscriptionID)
 			if err == nil {
-				subscriptionHandler := NewSubscriptionHandler(h.subscriptionRepo, h.userRepo, nil) // No need for price repo here
-				subscriptionResponse, err := subscriptionHandler.modelToResponse(subscription, false)
-				if err == nil {
-					response.Subscription = &subscriptionResponse
-				}
+				// Convert subscription model to response type
+				subscriptionResponse := formatSubscriptionResponse(subscription)
+				response.Subscription = &subscriptionResponse
 			}
 		}
 	}
 
 	return response, nil
+}
+
+// Helper function to format subscription model as response
+func formatSubscriptionResponse(subscription *models.Subscription) SubscriptionResponse {
+    response := SubscriptionResponse{
+        ID:                 subscription.ID,
+        UserID:             subscription.UserID,
+        PriceID:            subscription.PriceID,
+        Quantity:           subscription.Quantity,
+        Status:             string(subscription.Status),
+        CurrentPeriodStart: subscription.CurrentPeriodStart.Format(http.TimeFormat),
+        CurrentPeriodEnd:   subscription.CurrentPeriodEnd.Format(http.TimeFormat),
+        CancelAtPeriodEnd:  subscription.CancelAtPeriodEnd,
+        CreatedAt:          subscription.CreatedAt.Format(http.TimeFormat),
+        UpdatedAt:          subscription.UpdatedAt.Format(http.TimeFormat),
+    }
+    
+    // Add optional fields
+    if subscription.CancelAt != nil {
+        formatted := subscription.CancelAt.Format(http.TimeFormat)
+        response.CancelAt = &formatted
+    }
+    
+    if subscription.CanceledAt != nil {
+        formatted := subscription.CanceledAt.Format(http.TimeFormat)
+        response.CanceledAt = &formatted
+    }
+    
+    if subscription.EndedAt != nil {
+        formatted := subscription.EndedAt.Format(http.TimeFormat)
+        response.EndedAt = &formatted
+    }
+    
+    if subscription.TrialStart != nil {
+        formatted := subscription.TrialStart.Format(http.TimeFormat)
+        response.TrialStart = &formatted
+    }
+    
+    if subscription.TrialEnd != nil {
+        formatted := subscription.TrialEnd.Format(http.TimeFormat)
+        response.TrialEnd = &formatted
+    }
+    
+    return response
 }
 
 func (h *InvoiceHandler) parseTimeStr(timeStr string) (time.Time, error) {
