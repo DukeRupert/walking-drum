@@ -31,6 +31,10 @@ type Processor interface {
 	CreateSubscription(request SubscriptionRequest) (*SubscriptionResponse, error)
 	CancelSubscription(subscriptionID string) (*SubscriptionResponse, error)
 	UpdateSubscription(subscriptionID string, request SubscriptionRequest) (*SubscriptionResponse, error)
+
+	// Customer operations
+	CreateCustomer(request CustomerRequest) (string, error)
+	RetrieveCustomer(customerID string, params interface{}) (interface{}, error)
 	
 	// Webhook handling
 	HandleWebhook(body []byte, signature string) (interface{}, error)

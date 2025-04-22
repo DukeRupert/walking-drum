@@ -4,19 +4,32 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"log"
+
 	"net/http"
 	"os"
 
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/pressly/goose/v3"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/dukerupert/walking-drum/handlers"
 	"github.com/dukerupert/walking-drum/repository"
 	"github.com/dukerupert/walking-drum/services"
 	"github.com/dukerupert/walking-drum/services/payment"
 )
+
+func init() {
+	// Set up pretty logging for development
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	// Set log level based on environment (DEBUG, INFO, etc.)
+	// For troubleshooting, set to Debug level
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+
+	log.Debug().Msg("Logger initialized at debug level")
+}
 
 //go:embed migrations/*.sql
 var embedMigrations embed.FS
@@ -36,31 +49,30 @@ func main() {
 
 	// Connect to the database
 	db, err := sql.Open("postgres", dbConnectionString)
-	// log.Println(fmt.Sprintf("dbstring: %s", dbConnectionString))
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 	defer db.Close()
 
 	// Verify database connection
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		log.Fatal().Err(err).Msg("Failed to ping database")
 	}
-	log.Println("Successfully connected to the database")
+	log.Info().Msg("Successfully connected to the database")
 
 	// Configure Goose with embedded migrations
 	goose.SetBaseFS(embedMigrations)
 
 	// Set Goose's database dialect
 	if err := goose.SetDialect("postgres"); err != nil {
-		log.Fatalf("Failed to set dialect: %v", err)
+		log.Fatal().Err(err).Msg("Failed to set dialect")
 	}
 
 	// Run migrations
 	if err := goose.Up(db, "migrations"); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		log.Fatal().Err(err).Msg("Failed to run migrations")
 	}
-	log.Println("Migrations completed successfully")
+	log.Info().Msg("Migrations completed successfully")
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
@@ -176,6 +188,6 @@ func main() {
 	port := "8080"
 	log.Printf("Server starting on port %s...", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Fatal().Err(err).Msg("Failed to start server")
 	}
 }

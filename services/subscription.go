@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"strings"
 	"time"
 
 	"github.com/dukerupert/walking-drum/models"
@@ -14,6 +14,7 @@ import (
 	"github.com/dukerupert/walking-drum/services/payment"
 	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v74"
+	"github.com/rs/zerolog/log"
 )
 
 // SubscriptionService handles subscription operations
@@ -55,70 +56,72 @@ type CreateSubscriptionRequest struct {
 
 // CreateSubscription creates a new subscription
 func (s *SubscriptionService) CreateSubscription(req CreateSubscriptionRequest) (*models.Subscription, error) {
-	// Fetch the user to get the Stripe customer ID
-	user, err := s.userRepo.GetByID(context.Background(), req.UserID)
-	if err != nil {
-		return nil, err
-	}
+    // Sync the user with Stripe to ensure they have a Stripe customer ID
+    customerID, err := s.SyncUserWithStripe(req.UserID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to sync user with Stripe: %w", err)
+    }
+    
+    // No need to fetch the user again since we have the customer ID
+    // Just verify that the customer ID is valid
+    if customerID == "" {
+        return nil, errors.New("failed to obtain valid Stripe customer ID")
+    }
 
-	if user.StripeCustomerID == nil {
-		return nil, errors.New("user does not have a Stripe customer ID")
-	}
+    // Fetch the price to get the Stripe price ID
+    price, err := s.priceRepo.GetByID(context.Background(), req.PriceID)
+    if err != nil {
+        return nil, err
+    }
 
-	// Fetch the price to get the Stripe price ID
-	price, err := s.priceRepo.GetByID(context.Background(), req.PriceID)
-	if err != nil {
-		return nil, err
-	}
+    if price.StripePriceID == nil {
+        return nil, errors.New("price does not have a Stripe price ID")
+    }
 
-	if price.StripePriceID == nil {
-		return nil, errors.New("price does not have a Stripe price ID")
-	}
+    // Create the payment processor request
+    processorReq := payment.SubscriptionRequest{
+        CustomerID:      customerID, // Use the customer ID returned by SyncUserWithStripe
+        PriceID:         *price.StripePriceID,
+        Quantity:        int64(req.Quantity),
+        PaymentMethodID: req.PaymentMethodID,
+        Description:     req.Description,
+        OrderID:         req.OrderID,
+        Metadata:        req.Metadata,
+    }
 
-	// Create the payment processor request
-	processorReq := payment.SubscriptionRequest{
-		CustomerID:      *user.StripeCustomerID,
-		PriceID:         *price.StripePriceID,
-		Quantity:        int64(req.Quantity),
-		PaymentMethodID: req.PaymentMethodID,
-		Description:     req.Description,
-		OrderID:         req.OrderID,
-		Metadata:        req.Metadata,
-	}
+    // Create the subscription in the payment processor
+    processorResp, err := s.processor.CreateSubscription(processorReq)
+    if err != nil {
+        return nil, err
+    }
 
-	// Create the subscription in the payment processor
-	processorResp, err := s.processor.CreateSubscription(processorReq)
-	if err != nil {
-		return nil, err
-	}
+    // Create the subscription in our database
+    now := time.Now()
+    periodStart := time.Unix(processorResp.CurrentPeriodStart, 0)
+    periodEnd := time.Unix(processorResp.CurrentPeriodEnd, 0)
 
-	// Create the subscription in our database
-	now := time.Now()
-	periodStart := time.Unix(processorResp.CurrentPeriodStart, 0)
-	periodEnd := time.Unix(processorResp.CurrentPeriodEnd, 0)
+    subscription := &models.Subscription{
+        UserID:               req.UserID,
+        PriceID:              req.PriceID,
+        Quantity:             req.Quantity,
+        Status:               models.SubscriptionStatus(processorResp.Status),
+        CurrentPeriodStart:   periodStart,
+        CurrentPeriodEnd:     periodEnd,
+        StripeSubscriptionID: processorResp.ProcessorID,
+        StripeCustomerID:     customerID, // Use the customer ID returned by SyncUserWithStripe
+        CollectionMethod:     "charge_automatically", // Default for Stripe
+        CancelAtPeriodEnd:    processorResp.CancelAtPeriodEnd,
+        CreatedAt:            now,
+        UpdatedAt:            now,
+    }
 
-	subscription := &models.Subscription{
-		UserID:               req.UserID,
-		PriceID:              req.PriceID,
-		Quantity:             req.Quantity,
-		Status:               models.SubscriptionStatus(processorResp.Status),
-		CurrentPeriodStart:   periodStart,
-		CurrentPeriodEnd:     periodEnd,
-		StripeSubscriptionID: processorResp.ProcessorID,
-		StripeCustomerID:     *user.StripeCustomerID,
-		CollectionMethod:     "charge_automatically", // Default for Stripe
-		CancelAtPeriodEnd:    processorResp.CancelAtPeriodEnd,
-		CreatedAt:            now, // Set the creation timestamp
-		UpdatedAt:            now, // Set the update timestamp
-	}
+    // Save to database
+    err = s.subscriptionRepo.Create(context.Background(), subscription)
+    if err != nil {
+        return nil, err
+    }
 
-	// Save to database
-	err = s.subscriptionRepo.Create(context.Background(), subscription)
-	if err != nil {
-		return nil, err
-	}
-
-	return subscription, nil
+    return subscription, nil
 }
 
 // CancelSubscription cancels a subscription
@@ -504,4 +507,107 @@ func (s *SubscriptionService) handleInvoicePaymentFailed(invoice *stripe.Invoice
     
     // Create new invoice
     return s.invoiceRepo.Create(context.Background(), newInvoice)
+}
+
+// SyncUserWithStripe ensures a user has a Stripe customer ID
+func (s *SubscriptionService) SyncUserWithStripe(userID uuid.UUID) (string, error) {
+    log.Debug().Str("user_id", userID.String()).Msg("Starting SyncUserWithStripe")
+    
+    // Get the user
+    user, err := s.userRepo.GetByID(context.Background(), userID)
+    if err != nil {
+        log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to get user")
+        return "", err
+    }
+    
+    log.Debug().
+        Str("user_id", userID.String()).
+        Str("email", user.Email).
+        Str("name", user.Name).
+        Msg("Found user")
+    
+    // If user already has a Stripe customer ID and it's valid, return it
+    if user.StripeCustomerID != nil && *user.StripeCustomerID != "" {
+        // Check if the ID starts with "cus_" which is the Stripe prefix for customers
+        if strings.HasPrefix(*user.StripeCustomerID, "cus_") {
+            log.Debug().
+                Str("user_id", userID.String()).
+                Str("stripe_customer_id", *user.StripeCustomerID).
+                Msg("User already has a Stripe customer ID")
+            
+            // Try to retrieve the customer from Stripe to verify it exists
+            params := &stripe.CustomerParams{}
+            _, err := s.processor.RetrieveCustomer(*user.StripeCustomerID, params)
+            if err == nil {
+                log.Debug().
+                    Str("user_id", userID.String()).
+                    Str("stripe_customer_id", *user.StripeCustomerID).
+                    Msg("Verified customer exists in Stripe")
+                return *user.StripeCustomerID, nil
+            }
+            
+            log.Warn().
+                Err(err).
+                Str("user_id", userID.String()).
+                Str("stripe_customer_id", *user.StripeCustomerID).
+                Msg("Customer ID exists in database but not in Stripe, creating new one")
+        } else {
+            log.Warn().
+                Str("user_id", userID.String()).
+                Str("stripe_customer_id", *user.StripeCustomerID).
+                Msg("User has invalid Stripe customer ID format, creating new one")
+        }
+    } else {
+        log.Debug().
+            Str("user_id", userID.String()).
+            Msg("User does not have a Stripe customer ID, creating one")
+    }
+    
+    // User doesn't have a valid Stripe customer ID, create one
+    customerReq := payment.CustomerRequest{
+        Email:       user.Email,
+        Name:        user.Name,
+        Description: "Walking-Drum customer",
+        Metadata: map[string]string{
+            "user_id": user.ID.String(),
+        },
+    }
+    
+    log.Debug().
+        Str("user_id", userID.String()).
+        Str("email", user.Email).
+        Msg("Creating new Stripe customer")
+    
+    customerID, err := s.processor.CreateCustomer(customerReq)
+    if err != nil {
+        log.Error().
+            Err(err).
+            Str("user_id", userID.String()).
+            Msg("Failed to create Stripe customer")
+        return "", err
+    }
+    
+    log.Info().
+        Str("user_id", userID.String()).
+        Str("stripe_customer_id", customerID).
+        Msg("Successfully created Stripe customer")
+    
+    // Update the user with the new Stripe customer ID
+    user.StripeCustomerID = &customerID
+    err = s.userRepo.Update(context.Background(), user)
+    if err != nil {
+        log.Error().
+            Err(err).
+            Str("user_id", userID.String()).
+            Str("stripe_customer_id", customerID).
+            Msg("Failed to update user with Stripe customer ID")
+        return "", err
+    }
+    
+    log.Debug().
+        Str("user_id", userID.String()).
+        Str("stripe_customer_id", customerID).
+        Msg("Updated user with Stripe customer ID")
+    
+    return customerID, nil
 }

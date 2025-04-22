@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+	"github.com/stripe/stripe-go/v74/customer"
 	"github.com/stripe/stripe-go/v74"
 	"github.com/stripe/stripe-go/v74/client"
 	"github.com/stripe/stripe-go/v74/subscription"
@@ -17,20 +19,47 @@ type StripeProcessor struct {
 	client *client.API
 }
 
+type CustomerRequest struct {
+    Email       string
+    Name        string
+    Description string
+    Metadata    map[string]string
+}
+
 // NewStripeProcessor creates a new Stripe processor
 func NewStripeProcessor() *StripeProcessor {
-	apiKey := os.Getenv("STRIPE_SECRET_KEY")
-	if apiKey == "" {
-		// For development, you could fall back to a hardcoded test key
-		apiKey = "sk_test_your_test_key_here"
-	}
+    // Log that we're creating a new Stripe processor
+    log.Debug().Msg("Creating new Stripe processor")
+    
+    // Get the API key and log whether it was found
+    apiKey := os.Getenv("STRIPE_SECRET_KEY")
+    if apiKey == "" {
+        log.Warn().Msg("STRIPE_SECRET_KEY environment variable is not set or empty")
+        // For development, you could fall back to a hardcoded test key
+        apiKey = "sk_test_your_test_key_here"
+        log.Debug().Msg("Using fallback test key")
+    } else {
+        // Don't log the full key for security, just the first few characters
+        maskedKey := apiKey[:8] + "..." // Only show first 8 chars
+        log.Debug().Str("key_prefix", maskedKey).Msg("Found Stripe API key in environment")
+    }
 
-	sc := &client.API{}
-	sc.Init(apiKey, nil)
+    // Initialize the Stripe package-level API key first
+    // This is important for many Stripe operations
+    stripe.Key = apiKey
+    log.Debug().Msg("Set Stripe package-level API key")
 
-	return &StripeProcessor{
-		client: sc,
-	}
+    // Then initialize the client
+    log.Debug().Msg("Initializing Stripe client")
+    sc := &client.API{}
+    sc.Init(apiKey, nil)
+    
+    // Log successful initialization
+    log.Debug().Msg("Stripe client initialized successfully")
+
+    return &StripeProcessor{
+        client: sc,
+    }
 }
 
 // CreateSubscription creates a new subscription in Stripe
@@ -208,6 +237,45 @@ func (p *StripeProcessor) UpdateSubscription(subscriptionID string, request Subs
 	}
 
 	return response, nil
+}
+
+// CreateCustomer creates a new customer in Stripe
+func (p *StripeProcessor) CreateCustomer(request CustomerRequest) (string, error) {
+    params := &stripe.CustomerParams{}
+    
+    if request.Email != "" {
+        params.Email = stripe.String(request.Email)
+    }
+    
+    if request.Name != "" {
+        params.Name = stripe.String(request.Name)
+    }
+    
+    if request.Description != "" {
+        params.Description = stripe.String(request.Description)
+    }
+    
+    // Add metadata
+    for k, v := range request.Metadata {
+        params.AddMetadata(k, v)
+    }
+    
+    customer, err := customer.New(params)
+    if err != nil {
+        return "", err
+    }
+    
+    return customer.ID, nil
+}
+
+func (p *StripeProcessor) RetrieveCustomer(customerID string, params interface{}) (interface{}, error) {
+    // Assert params to the correct type
+    customerParams, ok := params.(*stripe.CustomerParams)
+    if !ok {
+        customerParams = &stripe.CustomerParams{}
+    }
+    
+    return customer.Get(customerID, customerParams)
 }
 
 // HandleWebhook processes Stripe webhooks
