@@ -666,14 +666,20 @@ func (s *SubscriptionService) SyncPriceWithStripe(priceID uuid.UUID) (string, er
     }
     
     // Check if product has Stripe ID, if not, use name
-    productIDForStripe := product.Name
-    if product.StripeProductID != nil && *product.StripeProductID != "" {
-        productIDForStripe = *product.StripeProductID
-    }
-    
-    // Create price request
+    // Sync the product with Stripe
+stripeProductID, err := s.SyncProductWithStripe(price.ProductID)
+if err != nil {
+    log.Error().
+        Err(err).
+        Str("price_id", priceID.String()).
+        Str("product_id", price.ProductID.String()).
+        Msg("Failed to sync product with Stripe")
+    return "", fmt.Errorf("failed to sync product with Stripe: %w", err)
+}
+
+// Create price request
 priceReq := payment.PriceRequest{
-    ProductID:     productIDForStripe,
+    ProductID:     stripeProductID, // Use the synced Stripe product ID
     UnitAmount:    price.Amount,
     Currency:      price.Currency,
     Recurring:     price.IntervalType != "",
@@ -698,7 +704,7 @@ if price.Nickname != nil {
     
     log.Debug().
         Str("price_id", priceID.String()).
-        Str("product_id", productIDForStripe).
+        Str("product_id", stripeProductID).
         Int64("amount", price.Amount).
         Msg("Creating new Stripe price")
     
@@ -734,4 +740,105 @@ if price.Nickname != nil {
         Msg("Updated price with Stripe price ID")
     
     return stripePriceID, nil
+}
+
+func (s *SubscriptionService) SyncProductWithStripe(productID uuid.UUID) (string, error) {
+    log.Debug().Str("product_id", productID.String()).Msg("Starting SyncProductWithStripe")
+    
+    // Get the product
+    product, err := s.productRepo.GetByID(context.Background(), productID)
+    if err != nil {
+        log.Error().Err(err).Str("product_id", productID.String()).Msg("Failed to get product")
+        return "", err
+    }
+    
+    log.Debug().
+        Str("product_id", productID.String()).
+        Str("name", product.Name).
+        Msg("Found product")
+    
+    // If product already has a Stripe product ID and it's valid, return it
+    if product.StripeProductID != nil && *product.StripeProductID != "" {
+        // Check if the ID starts with "prod_" which is the Stripe prefix for products
+        if strings.HasPrefix(*product.StripeProductID, "prod_") {
+            log.Debug().
+                Str("product_id", productID.String()).
+                Str("stripe_product_id", *product.StripeProductID).
+                Msg("Product already has a Stripe product ID")
+            
+            // Try to retrieve the product from Stripe to verify it exists
+            params := &stripe.ProductParams{}
+            _, err := s.processor.RetrieveProduct(*product.StripeProductID, params)
+            if err == nil {
+                log.Debug().
+                    Str("product_id", productID.String()).
+                    Str("stripe_product_id", *product.StripeProductID).
+                    Msg("Verified product exists in Stripe")
+                return *product.StripeProductID, nil
+            }
+            
+            log.Warn().
+                Err(err).
+                Str("product_id", productID.String()).
+                Str("stripe_product_id", *product.StripeProductID).
+                Msg("Product ID exists in database but not in Stripe, creating new one")
+        } else {
+            log.Warn().
+                Str("product_id", productID.String()).
+                Str("stripe_product_id", *product.StripeProductID).
+                Msg("Product has invalid Stripe product ID format, creating new one")
+        }
+    } else {
+        log.Debug().
+            Str("product_id", productID.String()).
+            Msg("Product does not have a Stripe product ID, creating one")
+    }
+    
+    // Create product request
+    productReq := payment.ProductRequest{
+        Name:        product.Name,
+        Description: product.Description,
+        Active:      product.IsActive,
+        Metadata: map[string]string{
+            "product_id": product.ID.String(),
+        },
+    }
+    
+    log.Debug().
+        Str("product_id", productID.String()).
+        Str("name", product.Name).
+        Msg("Creating new Stripe product")
+    
+    stripeProductID, err := s.processor.CreateProduct(productReq)
+    if err != nil {
+        log.Error().
+            Err(err).
+            Str("product_id", productID.String()).
+            Msg("Failed to create Stripe product")
+        return "", err
+    }
+    
+    log.Info().
+        Str("product_id", productID.String()).
+        Str("stripe_product_id", stripeProductID).
+        Msg("Successfully created Stripe product")
+    
+    // Update the product with the new Stripe product ID
+    product.StripeProductID = &stripeProductID
+    err = s.productRepo.Update(context.Background(), product)
+    if err != nil {
+        log.Error().
+            Err(err).
+            Str("product_id", productID.String()).
+            Str("stripe_product_id", stripeProductID).
+            Msg("Failed to update product with Stripe product ID")
+        return "", err
+    }
+    
+    log.Debug().
+        Str("product_id", productID.String()).
+        Str("stripe_product_id", stripeProductID).
+        Msg("Updated product with Stripe product ID")
+    
+    return stripeProductID, nil
 }

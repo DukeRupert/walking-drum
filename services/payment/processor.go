@@ -1,7 +1,6 @@
 // services/payment/processor.go
 package payment
 
-// SubscriptionRequest represents a request to create a subscription
 type SubscriptionRequest struct {
 	CustomerID      string
 	PriceID         string
@@ -21,6 +20,20 @@ type PriceRequest struct {
     IntervalCount  int64
     Nickname       string
     Metadata       map[string]string
+}
+
+type ProductRequest struct {
+    Name        string
+    Description string
+    Active      bool
+    Metadata    map[string]string
+}
+
+type CustomerRequest struct {
+    Email       string
+    Name        string
+    Description string
+    Metadata    map[string]string
 }
 
 // SubscriptionResponse represents a generic subscription response
@@ -50,6 +63,10 @@ type Processor interface {
 	// Price operations
 	CreatePrice(request PriceRequest) (string, error)
     RetrievePrice(priceID string, params interface{}) (interface{}, error)
+
+	// Product operations
+	CreateProduct(request ProductRequest) (string, error)
+    RetrieveProduct(productID string, params interface{}) (interface{}, error)
 	
 	// Webhook handling
 	HandleWebhook(body []byte, signature string) (interface{}, error)

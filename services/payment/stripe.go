@@ -22,13 +22,6 @@ type StripeProcessor struct {
 	client *client.API
 }
 
-type CustomerRequest struct {
-    Email       string
-    Name        string
-    Description string
-    Metadata    map[string]string
-}
-
 // NewStripeProcessor creates a new Stripe processor
 func NewStripeProcessor() *StripeProcessor {
     // Log that we're creating a new Stripe processor
@@ -345,6 +338,40 @@ func (p *StripeProcessor) RetrievePrice(priceID string, params interface{}) (int
     }
     
     return price.Get(priceID, priceParams)
+}
+
+func (p *StripeProcessor) CreateProduct(request ProductRequest) (string, error) {
+    params := &stripe.ProductParams{
+        Name:        stripe.String(request.Name),
+        Active:      stripe.Bool(request.Active),
+    }
+    
+    if request.Description != "" {
+        params.Description = stripe.String(request.Description)
+    }
+    
+    // Add metadata
+    for k, v := range request.Metadata {
+        params.AddMetadata(k, v)
+    }
+    
+    product, err := product.New(params)
+    if err != nil {
+        return "", err
+    }
+    
+    return product.ID, nil
+}
+
+// Add to Stripe processor
+func (p *StripeProcessor) RetrieveProduct(productID string, params interface{}) (interface{}, error) {
+    // Assert params to the correct type
+    productParams, ok := params.(*stripe.ProductParams)
+    if !ok {
+        productParams = &stripe.ProductParams{}
+    }
+    
+    return product.Get(productID, productParams)
 }
 
 // HandleWebhook processes Stripe webhooks
