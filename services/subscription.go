@@ -57,146 +57,124 @@ type CreateSubscriptionRequest struct {
 	Metadata        map[string]string `json:"metadata,omitempty"`
 }
 
-// CreateSubscription creates a new subscription
-func (s *SubscriptionService) CreateSubscription(req CreateSubscriptionRequest) (*models.Subscription, error) {
-    // Sync the user with Stripe to ensure they have a Stripe customer ID
-    customerID, err := s.SyncUserWithStripe(req.UserID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to sync user with Stripe: %w", err)
-    }
-
-    // Sync the price with Stripe
-    stripePriceID, err := s.SyncPriceWithStripe(req.PriceID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to sync price with Stripe: %w", err)
-    }
-
-    // Check if a payment method was provided
-    var paymentMethodID string
-    if req.PaymentMethodID != "" {
-        log.Info().Str("payment_method_id", req.PaymentMethodID).Msg("Payment method ID provided")
-        
-        // For Stripe test mode, we can use tok_visa directly
-        if req.PaymentMethodID == "tok_visa" {
-            // Create a payment method using the token
-            pmReq := payment.PaymentMethodRequest{
-                CustomerID: customerID,
-                Type:       "card",
-                Token:      req.PaymentMethodID,  // Use the token
-            }
-            
-            log.Debug().
-                Str("customer_id", customerID).
-                Str("token", req.PaymentMethodID).
-                Msg("Creating payment method from token")
-                
-            createdPM, err := s.processor.CreatePaymentMethod(pmReq)
-            if err != nil {
-                return nil, fmt.Errorf("failed to create payment method from token: %w", err)
-            }
-            
-            paymentMethodID = createdPM
-            
-            log.Info().
-                Str("payment_method_id", paymentMethodID).
-                Str("customer_id", customerID).
-                Msg("Created payment method from token")
-                
-        } else if strings.HasPrefix(req.PaymentMethodID, "pm_") {
-            // This is already a Stripe payment method ID, use it directly
-            log.Info().Msg("Using existing payment method ID")
-            paymentMethodID = req.PaymentMethodID
-            
-            // Ensure it's attached to the customer
-            err := s.processor.AttachPaymentMethodIfNeeded(paymentMethodID, customerID)
-            if err != nil {
-                log.Warn().
-                    Err(err).
-                    Str("payment_method_id", paymentMethodID).
-                    Str("customer_id", customerID).
-                    Msg("Failed to attach payment method to customer")
-                    
-                // Continue anyway - it might already be attached
-            }
-        } else {
-            // Not a valid payment method ID format, just log and continue
-            log.Warn().
-                Str("payment_method_id", req.PaymentMethodID).
-                Msg("Invalid payment method ID format, proceeding without payment method")
-        }
-    } else {
-        log.Info().Msg("No payment method ID provided")
-    }
-
-    // Create the payment processor request
-    processorReq := payment.SubscriptionRequest{
-        CustomerID:      customerID,
-        PriceID:         stripePriceID,
-        Quantity:        int64(req.Quantity),
-        PaymentMethodID: paymentMethodID,
-        Description:     req.Description,
-        OrderID:         req.OrderID,
-        Metadata:        req.Metadata,
-    }
-
-    // Create the subscription in the payment processor
-    processorResp, err := s.processor.CreateSubscription(processorReq)
-    if err != nil {
-        return nil, err
-    }
-
-    // Create the subscription in our database
-    now := time.Now()
-    periodStart := time.Unix(processorResp.CurrentPeriodStart, 0)
-    periodEnd := time.Unix(processorResp.CurrentPeriodEnd, 0)
-
-    subscription := &models.Subscription{
-        UserID:               req.UserID,
-        PriceID:              req.PriceID,
-        Quantity:             req.Quantity,
-        Status:               models.SubscriptionStatus(processorResp.Status),
-        CurrentPeriodStart:   periodStart,
-        CurrentPeriodEnd:     periodEnd,
-        StripeSubscriptionID: processorResp.ProcessorID,
-        StripeCustomerID:     customerID,
-        CollectionMethod:     "charge_automatically", // Default for Stripe
-        CancelAtPeriodEnd:    processorResp.CancelAtPeriodEnd,
-        CreatedAt:            now,
-        UpdatedAt:            now,
-    }
-
-    // Save to database
-    err = s.subscriptionRepo.Create(context.Background(), subscription)
-    if err != nil {
-        return nil, err
-    }
-
-    return subscription, nil
+type UpdateSubscriptionRequest struct {
+	Quantity        int64             `json:"quantity,omitempty"`
+	PriceID         uuid.UUID         `json:"price_id,omitempty"`
+	PaymentMethodID string            `json:"payment_method_id,omitempty"`
+	Description     string            `json:"description,omitempty"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
 }
 
-// CancelSubscription cancels a subscription
-func (s *SubscriptionService) CancelSubscription(subscriptionID uuid.UUID) (*models.Subscription, error) {
-	// Fetch the subscription
-	subscription, err := s.subscriptionRepo.GetByID(context.Background(), subscriptionID)
+// CreateSubscription creates a new subscription
+func (s *SubscriptionService) CreateSubscription(req CreateSubscriptionRequest) (*models.Subscription, error) {
+	// Sync the user with Stripe to ensure they have a Stripe customer ID
+	customerID, err := s.SyncUserWithStripe(req.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sync user with Stripe: %w", err)
+	}
+
+	// Sync the price with Stripe
+	stripePriceID, err := s.SyncPriceWithStripe(req.PriceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sync price with Stripe: %w", err)
+	}
+
+	// Check if a payment method was provided
+	var paymentMethodID string
+	if req.PaymentMethodID != "" {
+		log.Info().Str("payment_method_id", req.PaymentMethodID).Msg("Payment method ID provided")
+
+		// For Stripe test mode, we can use tok_visa directly
+		if req.PaymentMethodID == "tok_visa" {
+			// Create a payment method using the token
+			pmReq := payment.PaymentMethodRequest{
+				CustomerID: customerID,
+				Type:       "card",
+				Token:      req.PaymentMethodID, // Use the token
+			}
+
+			log.Debug().
+				Str("customer_id", customerID).
+				Str("token", req.PaymentMethodID).
+				Msg("Creating payment method from token")
+
+			createdPM, err := s.processor.CreatePaymentMethod(pmReq)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create payment method from token: %w", err)
+			}
+
+			paymentMethodID = createdPM
+
+			log.Info().
+				Str("payment_method_id", paymentMethodID).
+				Str("customer_id", customerID).
+				Msg("Created payment method from token")
+
+		} else if strings.HasPrefix(req.PaymentMethodID, "pm_") {
+			// This is already a Stripe payment method ID, use it directly
+			log.Info().Msg("Using existing payment method ID")
+			paymentMethodID = req.PaymentMethodID
+
+			// Ensure it's attached to the customer
+			err := s.processor.AttachPaymentMethodIfNeeded(paymentMethodID, customerID)
+			if err != nil {
+				log.Warn().
+					Err(err).
+					Str("payment_method_id", paymentMethodID).
+					Str("customer_id", customerID).
+					Msg("Failed to attach payment method to customer")
+
+				// Continue anyway - it might already be attached
+			}
+		} else {
+			// Not a valid payment method ID format, just log and continue
+			log.Warn().
+				Str("payment_method_id", req.PaymentMethodID).
+				Msg("Invalid payment method ID format, proceeding without payment method")
+		}
+	} else {
+		log.Info().Msg("No payment method ID provided")
+	}
+
+	// Create the payment processor request
+	processorReq := payment.SubscriptionRequest{
+		CustomerID:      customerID,
+		PriceID:         stripePriceID,
+		Quantity:        int64(req.Quantity),
+		PaymentMethodID: paymentMethodID,
+		Description:     req.Description,
+		OrderID:         req.OrderID,
+		Metadata:        req.Metadata,
+	}
+
+	// Create the subscription in the payment processor
+	processorResp, err := s.processor.CreateSubscription(processorReq)
 	if err != nil {
 		return nil, err
 	}
 
-	// Cancel the subscription in the payment processor
-	_, err = s.processor.CancelSubscription(subscription.StripeSubscriptionID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update the subscription in our database
+	// Create the subscription in our database
 	now := time.Now()
-	subscription.Status = models.SubscriptionStatusCanceled
-	subscription.CanceledAt = &now
-	subscription.EndedAt = &now
-	subscription.UpdatedAt = now
+	periodStart := time.Unix(processorResp.CurrentPeriodStart, 0)
+	periodEnd := time.Unix(processorResp.CurrentPeriodEnd, 0)
+
+	subscription := &models.Subscription{
+		UserID:               req.UserID,
+		PriceID:              req.PriceID,
+		Quantity:             req.Quantity,
+		Status:               models.SubscriptionStatus(processorResp.Status),
+		CurrentPeriodStart:   periodStart,
+		CurrentPeriodEnd:     periodEnd,
+		StripeSubscriptionID: processorResp.ProcessorID,
+		StripeCustomerID:     customerID,
+		CollectionMethod:     "charge_automatically", // Default for Stripe
+		CancelAtPeriodEnd:    processorResp.CancelAtPeriodEnd,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
 
 	// Save to database
-	err = s.subscriptionRepo.Update(context.Background(), subscription)
+	err = s.subscriptionRepo.Create(context.Background(), subscription)
 	if err != nil {
 		return nil, err
 	}
@@ -898,4 +876,296 @@ func (s *SubscriptionService) SyncProductWithStripe(productID uuid.UUID) (string
 		Msg("Updated product with Stripe product ID")
 
 	return stripeProductID, nil
+}
+
+// GetSubscription retrieves a subscription by ID
+func (s *SubscriptionService) GetSubscription(subscriptionID uuid.UUID) (*models.Subscription, error) {
+	return s.subscriptionRepo.GetByID(context.Background(), subscriptionID)
+}
+
+// GetUserSubscriptions retrieves all subscriptions for a user with optional filtering
+func (s *SubscriptionService) GetUserSubscriptions(userID uuid.UUID, status string, limit, offset int) ([]*models.Subscription, error) {
+    return s.subscriptionRepo.GetByUserID(context.Background(), userID, status, limit, offset)
+}
+
+// UpdateSubscription updates an existing subscription
+func (s *SubscriptionService) UpdateSubscription(subscriptionID uuid.UUID, req UpdateSubscriptionRequest) (*models.Subscription, error) {
+	// Fetch the subscription
+	subscription, err := s.subscriptionRepo.GetByID(context.Background(), subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepare update parameters
+	updateReq := payment.SubscriptionRequest{
+		CustomerID: subscription.StripeCustomerID,
+	}
+
+	// Add fields that need to be updated
+	if req.Quantity > 0 {
+		updateReq.Quantity = req.Quantity
+	}
+
+	if req.PaymentMethodID != "" {
+		updateReq.PaymentMethodID = req.PaymentMethodID
+	}
+
+	if req.Description != "" {
+		updateReq.Description = req.Description
+	}
+
+	if req.Metadata != nil {
+		updateReq.Metadata = req.Metadata
+	}
+
+	// Handle price change if requested
+	if req.PriceID != uuid.Nil && req.PriceID != subscription.PriceID {
+		// Sync the price with Stripe
+		stripePriceID, err := s.SyncPriceWithStripe(req.PriceID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sync new price with Stripe: %w", err)
+		}
+
+		updateReq.PriceID = stripePriceID
+		subscription.PriceID = req.PriceID
+	}
+
+	// Update in payment processor
+	processorResp, err := s.processor.UpdateSubscription(subscription.StripeSubscriptionID, updateReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update local subscription
+	now := time.Now()
+
+	if req.Quantity > 0 {
+		subscription.Quantity = int(req.Quantity)
+	}
+
+	// Update period dates if changed
+	if processorResp.CurrentPeriodStart > 0 {
+		subscription.CurrentPeriodStart = time.Unix(processorResp.CurrentPeriodStart, 0)
+	}
+
+	if processorResp.CurrentPeriodEnd > 0 {
+		subscription.CurrentPeriodEnd = time.Unix(processorResp.CurrentPeriodEnd, 0)
+	}
+
+	subscription.Status = models.SubscriptionStatus(processorResp.Status)
+	subscription.CancelAtPeriodEnd = processorResp.CancelAtPeriodEnd
+	subscription.UpdatedAt = now
+
+	// Save to database
+	err = s.subscriptionRepo.Update(context.Background(), subscription)
+	if err != nil {
+		return nil, err
+	}
+
+	return subscription, nil
+}
+
+// CancelSubscription cancels a subscription, either immediately or at period end
+func (s *SubscriptionService) CancelSubscription(subscriptionID uuid.UUID, immediate bool) (*models.Subscription, error) {
+	// Fetch the subscription
+	subscription, err := s.subscriptionRepo.GetByID(context.Background(), subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cancel the subscription in the payment processor
+	var processorResp *payment.SubscriptionResponse
+	if immediate {
+		// For immediate cancellation
+		processorResp, err = s.processor.CancelSubscription(subscription.StripeSubscriptionID)
+	} else {
+		// For cancellation at period end, we update with cancel_at_period_end=true
+		updateReq := payment.SubscriptionRequest{
+			CustomerID: subscription.StripeCustomerID,
+			Metadata: map[string]string{
+				"cancel_at_period_end": "true",
+			},
+		}
+		processorResp, err = s.processor.UpdateSubscription(subscription.StripeSubscriptionID, updateReq)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info().Str("ID", processorResp.ID).Str("CustomerID", processorResp.CustomerID).Bool("CancelAtPeriodEnd", processorResp.CancelAtPeriodEnd).Msg("Subscription cancelled")
+
+	// Update the subscription in our database
+	now := time.Now()
+
+	if immediate {
+		subscription.Status = models.SubscriptionStatusCanceled
+		subscription.CanceledAt = &now
+		subscription.EndedAt = &now
+	} else {
+		subscription.CancelAtPeriodEnd = true
+		// Set the cancel_at to the end of the current period
+		cancelAt := subscription.CurrentPeriodEnd
+		subscription.CancelAt = &cancelAt
+	}
+
+	subscription.UpdatedAt = now
+
+	// Save to database
+	err = s.subscriptionRepo.Update(context.Background(), subscription)
+	if err != nil {
+		return nil, err
+	}
+
+	return subscription, nil
+}
+
+// ReactivateSubscription reactivates a canceled subscription that was set to cancel at period end
+func (s *SubscriptionService) ReactivateSubscription(subscriptionID uuid.UUID) (*models.Subscription, error) {
+	// Fetch the subscription
+	subscription, err := s.subscriptionRepo.GetByID(context.Background(), subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify the subscription is in a state that can be reactivated
+	if subscription.Status == models.SubscriptionStatusCanceled ||
+		subscription.Status == models.SubscriptionStatusIncomplete ||
+		subscription.EndedAt != nil {
+		return nil, errors.New("subscription cannot be reactivated: it is already canceled or ended")
+	}
+
+	// Only subscriptions set to cancel at period end can be reactivated
+	if !subscription.CancelAtPeriodEnd {
+		return nil, errors.New("subscription is not set to cancel at period end")
+	}
+
+	// Update with cancel_at_period_end=false to reactivate
+	updateReq := payment.SubscriptionRequest{
+		CustomerID: subscription.StripeCustomerID,
+		Metadata: map[string]string{
+			"cancel_at_period_end": "false",
+		},
+	}
+
+	processorResp, err := s.processor.UpdateSubscription(subscription.StripeSubscriptionID, updateReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the subscription in our database
+	now := time.Now()
+	subscription.CancelAtPeriodEnd = false
+	subscription.CancelAt = nil
+	subscription.Status = models.SubscriptionStatus(processorResp.Status)
+	subscription.UpdatedAt = now
+
+	// Save to database
+	err = s.subscriptionRepo.Update(context.Background(), subscription)
+	if err != nil {
+		return nil, err
+	}
+
+	return subscription, nil
+}
+
+// PauseSubscription pauses a subscription
+func (s *SubscriptionService) PauseSubscription(subscriptionID uuid.UUID, resumeAt *string) (*models.Subscription, error) {
+	// Fetch the subscription
+	subscription, err := s.subscriptionRepo.GetByID(context.Background(), subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify the subscription is active and can be paused
+	if subscription.Status != models.SubscriptionStatusActive {
+		return nil, errors.New("only active subscriptions can be paused")
+	}
+
+	// Prepare metadata to indicate pause
+	metadata := map[string]string{
+		"paused": "true",
+	}
+
+	// Parse the resume date if provided
+	var resumeTime *time.Time
+	if resumeAt != nil && *resumeAt != "" {
+		parsed, err := time.Parse(time.RFC3339, *resumeAt)
+		if err != nil {
+			return nil, fmt.Errorf("invalid resume date format: %w", err)
+		}
+		resumeTime = &parsed
+
+		// Add resume date to metadata
+		metadata["resume_at"] = parsed.Format(time.RFC3339)
+	}
+
+	// Update the subscription with pause metadata
+	updateReq := payment.SubscriptionRequest{
+		CustomerID: subscription.StripeCustomerID,
+		Metadata:   metadata,
+	}
+
+	_, err = s.processor.UpdateSubscription(subscription.StripeSubscriptionID, updateReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the subscription in our database
+	now := time.Now()
+	subscription.Status = models.SubscriptionStatusPaused
+	if resumeTime != nil {
+		subscription.ResumeAt = resumeTime
+	}
+	subscription.UpdatedAt = now
+
+	// Save to database
+	err = s.subscriptionRepo.Update(context.Background(), subscription)
+	if err != nil {
+		return nil, err
+	}
+
+	return subscription, nil
+}
+
+// ResumeSubscription resumes a paused subscription
+func (s *SubscriptionService) ResumeSubscription(subscriptionID uuid.UUID) (*models.Subscription, error) {
+	// Fetch the subscription
+	subscription, err := s.subscriptionRepo.GetByID(context.Background(), subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify the subscription is paused and can be resumed
+	if subscription.Status != models.SubscriptionStatusPaused {
+		return nil, errors.New("only paused subscriptions can be resumed")
+	}
+
+	// Update the subscription with resume metadata
+	updateReq := payment.SubscriptionRequest{
+		CustomerID: subscription.StripeCustomerID,
+		Metadata: map[string]string{
+			"paused":    "false",
+			"resume_at": "",
+		},
+	}
+
+	processorResp, err := s.processor.UpdateSubscription(subscription.StripeSubscriptionID, updateReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the subscription in our database
+	now := time.Now()
+	subscription.Status = models.SubscriptionStatus(processorResp.Status)
+	subscription.ResumeAt = nil
+	subscription.UpdatedAt = now
+
+	// Save to database
+	err = s.subscriptionRepo.Update(context.Background(), subscription)
+	if err != nil {
+		return nil, err
+	}
+
+	return subscription, nil
 }

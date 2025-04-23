@@ -17,6 +17,7 @@ const (
 	SubscriptionStatusTrialing        SubscriptionStatus = "trialing"
 	SubscriptionStatusIncomplete      SubscriptionStatus = "incomplete"
 	SubscriptionStatusIncompleteExpired SubscriptionStatus = "incomplete_expired"
+	SubscriptionStatusPaused          SubscriptionStatus = "paused" // Add this line
 )
 
 type Subscription struct {
@@ -32,6 +33,7 @@ type Subscription struct {
 	EndedAt            *time.Time         `json:"ended_at,omitempty"`
 	TrialStart         *time.Time         `json:"trial_start,omitempty"`
 	TrialEnd           *time.Time         `json:"trial_end,omitempty"`
+	ResumeAt           *time.Time         `json:"resume_at,omitempty"` // Add this line
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`
 	StripeSubscriptionID string           `json:"stripe_subscription_id"`

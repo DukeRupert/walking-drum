@@ -153,10 +153,6 @@ func main() {
 	apiRouter.HandleFunc("/prices/{id}", priceHandler.UpdatePrice).Methods("PUT")
 	apiRouter.HandleFunc("/prices/{id}", priceHandler.DeletePrice).Methods("DELETE")
 
-	// Register subscription routes
-	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
-	apiRouter.HandleFunc("/subscriptions/{id}/cancel", subscriptionHandler.CancelSubscription).Methods("POST")
-
 	// Register invoice routes
 	apiRouter.HandleFunc("/invoices", invoiceHandler.CreateInvoice).Methods("POST")
 	apiRouter.HandleFunc("/invoices", invoiceHandler.ListInvoices).Methods("GET")
@@ -191,8 +187,13 @@ func main() {
 
 	// Register subscription routes
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
+	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.GetSubscription).Methods("GET")
+	apiRouter.HandleFunc("/users/{userID}/subscriptions", subscriptionHandler.GetUserSubscriptions).Methods("GET")
+	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.UpdateSubscription).Methods("PUT")
 	apiRouter.HandleFunc("/subscriptions/{id}/cancel", subscriptionHandler.CancelSubscription).Methods("POST")
-	apiRouter.HandleFunc("/webhooks/payment", subscriptionHandler.HandleWebhook).Methods("POST")
+	apiRouter.HandleFunc("/subscriptions/{id}/reactivate", subscriptionHandler.ReactivateSubscription).Methods("POST")
+	apiRouter.HandleFunc("/subscriptions/{id}/pause", subscriptionHandler.PauseSubscription).Methods("POST")
+	apiRouter.HandleFunc("/subscriptions/{id}/resume", subscriptionHandler.ResumeSubscription).Methods("POST")
 
 	// Register payment method routes
 	apiRouter.HandleFunc("/payment-methods", paymentMethodHandler.CreatePaymentMethod).Methods("POST")

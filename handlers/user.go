@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/dukerupert/walking-drum/models"
@@ -132,31 +133,68 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+	logger := log.With().
+		Str("handler", "UserHandler").
+		Str("method", "GetUser").
+		Logger()
+
 	vars := mux.Vars(r)
-	userID, err := uuid.Parse(vars["id"])
+	userIDStr := vars["id"]
+	
+	logger.Debug().Str("userID", userIDStr).Msg("Processing user request")
+	
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
+		logger.Error().Err(err).Str("userID", userIDStr).Msg("Invalid user ID format")
 		http.Error(w, "Invalid user ID", http.StatusBadRequest)
 		return
 	}
 
+	logger.Debug().Str("userID", userID.String()).Msg("Fetching user from repository")
+	
 	user, err := h.userRepo.GetByID(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
+			logger.Info().
+				Err(err).
+				Str("userID", userID.String()).
+				Msg("User not found")
 			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
+		logger.Error().
+			Err(err).
+			Str("userID", userID.String()).
+			Msg("Failed to get user from repository")
 		http.Error(w, "Failed to get user", http.StatusInternalServerError)
 		return
 	}
 
+	logger.Debug().
+		Str("userID", userID.String()).
+		Str("email", user.Email). // Assuming user has an Email field
+		Msg("User found, generating response")
+
 	response, err := h.modelToResponse(user)
 	if err != nil {
+		logger.Error().
+			Err(err).
+			Str("userID", userID.String()).
+			Msg("Failed to generate user response")
 		http.Error(w, "Failed to generate response: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logger.Error().Err(err).Msg("Failed to encode JSON response")
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	
+	logger.Info().
+		Str("userID", userID.String()).
+		Msg("User returned successfully")
 }
 
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {

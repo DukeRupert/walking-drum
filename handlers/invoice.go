@@ -156,37 +156,37 @@ func formatSubscriptionResponse(subscription *models.Subscription) SubscriptionR
         PriceID:            subscription.PriceID,
         Quantity:           subscription.Quantity,
         Status:             string(subscription.Status),
-        CurrentPeriodStart: subscription.CurrentPeriodStart.Format(http.TimeFormat),
-        CurrentPeriodEnd:   subscription.CurrentPeriodEnd.Format(http.TimeFormat),
+        CurrentPeriodStart: subscription.CurrentPeriodStart,
+        CurrentPeriodEnd:   subscription.CurrentPeriodEnd,
         CancelAtPeriodEnd:  subscription.CancelAtPeriodEnd,
-        CreatedAt:          subscription.CreatedAt.Format(http.TimeFormat),
-        UpdatedAt:          subscription.UpdatedAt.Format(http.TimeFormat),
+        CreatedAt:          subscription.CreatedAt,
+        UpdatedAt:          subscription.UpdatedAt,
     }
     
     // Add optional fields
     if subscription.CancelAt != nil {
-        formatted := subscription.CancelAt.Format(http.TimeFormat)
-        response.CancelAt = &formatted
+        formatted := subscription.CancelAt
+        response.CancelAt = formatted
     }
     
     if subscription.CanceledAt != nil {
-        formatted := subscription.CanceledAt.Format(http.TimeFormat)
-        response.CanceledAt = &formatted
+        formatted := subscription.CanceledAt
+        response.CanceledAt = formatted
     }
     
     if subscription.EndedAt != nil {
-        formatted := subscription.EndedAt.Format(http.TimeFormat)
-        response.EndedAt = &formatted
+        formatted := subscription.EndedAt
+        response.EndedAt = formatted
     }
     
     if subscription.TrialStart != nil {
-        formatted := subscription.TrialStart.Format(http.TimeFormat)
-        response.TrialStart = &formatted
+        formatted := subscription.TrialStart
+        response.TrialStart = formatted
     }
     
     if subscription.TrialEnd != nil {
-        formatted := subscription.TrialEnd.Format(http.TimeFormat)
-        response.TrialEnd = &formatted
+        formatted := subscription.TrialEnd
+        response.TrialEnd = formatted
     }
     
     return response
