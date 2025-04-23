@@ -1,37 +1,48 @@
--- +goose Up
--- +goose StatementBegin
-CREATE TYPE subscription_status AS ENUM ('active', 'past_due', 'canceled', 'unpaid', 'trialing', 'incomplete', 'incomplete_expired');
+// models/subscription.go
+package models
 
-CREATE TABLE subscriptions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    price_id UUID NOT NULL REFERENCES prices(id),
-    quantity INTEGER NOT NULL DEFAULT 1,
-    status subscription_status NOT NULL,
-    current_period_start TIMESTAMP WITH TIME ZONE NOT NULL,
-    current_period_end TIMESTAMP WITH TIME ZONE NOT NULL,
-    cancel_at TIMESTAMP WITH TIME ZONE,
-    canceled_at TIMESTAMP WITH TIME ZONE,
-    ended_at TIMESTAMP WITH TIME ZONE,
-    trial_start TIMESTAMP WITH TIME ZONE,
-    trial_end TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    stripe_subscription_id VARCHAR(255) UNIQUE,
-    stripe_customer_id VARCHAR(255) NOT NULL,
-    collection_method VARCHAR(50) NOT NULL DEFAULT 'charge_automatically',
-    cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
-    metadata JSONB
-);
+import (
+	"time"
 
-CREATE INDEX idx_subscriptions_user_id ON subscriptions(user_id);
-CREATE INDEX idx_subscriptions_price_id ON subscriptions(price_id);
-CREATE INDEX idx_subscriptions_stripe_subscription_id ON subscriptions(stripe_subscription_id);
-CREATE INDEX idx_subscriptions_stripe_customer_id ON subscriptions(stripe_customer_id);
--- +goose StatementEnd
+	"github.com/google/uuid"
+)
 
--- +goose Down
--- +goose StatementBegin
-DROP TABLE subscriptions;
-DROP TYPE subscription_status;
--- +goose StatementEnd
+type SubscriptionStatus string
+
+const (
+	SubscriptionStatusActive          SubscriptionStatus = "active"
+	SubscriptionStatusPastDue         SubscriptionStatus = "past_due"
+	SubscriptionStatusCanceled        SubscriptionStatus = "canceled"
+	SubscriptionStatusUnpaid          SubscriptionStatus = "unpaid"
+	SubscriptionStatusTrialing        SubscriptionStatus = "trialing"
+	SubscriptionStatusIncomplete      SubscriptionStatus = "incomplete"
+	SubscriptionStatusIncompleteExpired SubscriptionStatus = "incomplete_expired"
+	SubscriptionStatusPaused          SubscriptionStatus = "paused" // Add this line
+)
+
+type Subscription struct {
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	PriceID            uuid.UUID          `json:"price_id"`
+	Quantity           int                `json:"quantity"`
+	Status             SubscriptionStatus `json:"status"`
+	CurrentPeriodStart time.Time          `json:"current_period_start"`
+	CurrentPeriodEnd   time.Time          `json:"current_period_end"`
+	CancelAt           *time.Time         `json:"cancel_at,omitempty"`
+	CanceledAt         *time.Time         `json:"canceled_at,omitempty"`
+	EndedAt            *time.Time         `json:"ended_at,omitempty"`
+	TrialStart         *time.Time         `json:"trial_start,omitempty"`
+	TrialEnd           *time.Time         `json:"trial_end,omitempty"`
+	ResumeAt           *time.Time         `json:"resume_at,omitempty"` // Add this line
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	StripeSubscriptionID string           `json:"stripe_subscription_id"`
+	StripeCustomerID    string           `json:"stripe_customer_id"`
+	CollectionMethod   string            `json:"collection_method"`
+	CancelAtPeriodEnd  bool              `json:"cancel_at_period_end"`
+	Metadata           *map[string]interface{} `json:"metadata,omitempty"`
+	
+	// Relations
+	User               *User              `json:"user,omitempty"`
+	Price              *Price             `json:"price,omitempty"`
+}
