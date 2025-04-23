@@ -124,7 +124,6 @@ func main() {
 		priceRepo,
 	)
 
-
 	// Set up router
 	router := mux.NewRouter()
 
@@ -197,6 +196,18 @@ func main() {
 
 	// Register payment method routes
 	apiRouter.HandleFunc("/payment-methods", paymentMethodHandler.CreatePaymentMethod).Methods("POST")
+	// Create payment method
+	apiRouter.HandleFunc("/payment-methods", paymentMethodHandler.CreatePaymentMethod).Methods("POST")
+	// List payment methods for a customer
+	apiRouter.HandleFunc("/payment-methods/customer/{customerID}", paymentMethodHandler.ListPaymentMethods).Methods("GET")
+	// Get a specific payment method
+	apiRouter.HandleFunc("/payment-methods/{id}", paymentMethodHandler.GetPaymentMethod).Methods("GET")
+	// Update a payment method
+	apiRouter.HandleFunc("/payment-methods/{id}", paymentMethodHandler.UpdatePaymentMethod).Methods("PUT")
+	// Set payment method as default
+	apiRouter.HandleFunc("/payment-methods/{id}/default/{customerID}", paymentMethodHandler.SetDefaultPaymentMethod).Methods("PUT")
+	// Detach a payment method
+	apiRouter.HandleFunc("/payment-methods/{id}", paymentMethodHandler.DetachPaymentMethod).Methods("DELETE")
 
 	// Start the HTTP server
 	port := "8080"

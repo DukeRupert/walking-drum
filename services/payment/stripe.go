@@ -467,6 +467,161 @@ func (p *StripeProcessor) AttachPaymentMethodIfNeeded(paymentMethodID string, cu
     return nil
 }
 
+// ListPaymentMethods retrieves all payment methods for a customer
+func (p *StripeProcessor) ListPaymentMethods(customerID string) ([]PaymentMethod, error) {
+	// Create parameters for listing payment methods
+	params := &stripe.PaymentMethodListParams{
+		Customer: stripe.String(customerID),
+		Type:     stripe.String("card"), // Filter to card payment methods
+	}
+	
+	// Create an iterator
+	i := paymentmethod.List(params)
+	
+	// Get customer to check default payment method
+	cust, err := customer.Get(customerID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get customer: %w", err)
+	}
+	
+	// Default payment method ID (might be nil)
+	var defaultPMID string
+	if cust.InvoiceSettings != nil && cust.InvoiceSettings.DefaultPaymentMethod != nil {
+		defaultPMID = *&cust.InvoiceSettings.DefaultPaymentMethod.ID
+	}
+	
+	// Collect payment methods
+	var paymentMethods []PaymentMethod
+	for i.Next() {
+		pm := i.PaymentMethod()
+		
+		// Create our model
+		method := PaymentMethod{
+			ID:        pm.ID,
+			Type:      string(pm.Type),
+			IsDefault: pm.ID == defaultPMID,
+		}
+		
+		// Extract card details if present
+		if pm.Card != nil {
+			method.CardBrand = string(pm.Card.Brand)
+			method.CardLast4 = pm.Card.Last4
+			method.CardExpMonth = int(pm.Card.ExpMonth)
+			method.CardExpYear = int(pm.Card.ExpYear)
+		}
+		
+		// Extract billing details
+		if pm.BillingDetails != nil && pm.BillingDetails.Name != "" {
+			method.BillingName = pm.BillingDetails.Name
+		}
+		
+		// Extract metadata
+		if len(pm.Metadata) > 0 {
+			method.Metadata = make(map[string]string)
+			for k, v := range pm.Metadata {
+				method.Metadata[k] = v
+			}
+		}
+		
+		paymentMethods = append(paymentMethods, method)
+	}
+	
+	// Check for errors from the iterator
+	if err := i.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating payment methods: %w", err)
+	}
+	
+	return paymentMethods, nil
+}
+
+// GetPaymentMethod retrieves a specific payment method
+func (p *StripeProcessor) GetPaymentMethod(paymentMethodID string) (*PaymentMethod, error) {
+	// Retrieve the payment method from Stripe
+	pm, err := paymentmethod.Get(paymentMethodID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get payment method: %w", err)
+	}
+	
+	// Create our model
+	method := &PaymentMethod{
+		ID:   pm.ID,
+		Type: string(pm.Type),
+	}
+	
+	// Extract card details if present
+	if pm.Card != nil {
+		method.CardBrand = string(pm.Card.Brand)
+		method.CardLast4 = pm.Card.Last4
+		method.CardExpMonth = int(pm.Card.ExpMonth)
+		method.CardExpYear = int(pm.Card.ExpYear)
+	}
+	
+	// Extract billing details
+	if pm.BillingDetails != nil && pm.BillingDetails.Name != "" {
+		method.BillingName = pm.BillingDetails.Name
+	}
+	
+	// Extract metadata
+	if len(pm.Metadata) > 0 {
+		method.Metadata = make(map[string]string)
+		for k, v := range pm.Metadata {
+			method.Metadata[k] = v
+		}
+	}
+	
+	// Check if this is the default payment method (if attached to a customer)
+	if pm.Customer != nil && pm.Customer.ID != "" {
+		cust, err := customer.Get(pm.Customer.ID, nil)
+		if err == nil && cust.InvoiceSettings != nil && 
+           cust.InvoiceSettings.DefaultPaymentMethod != nil && 
+           *&cust.InvoiceSettings.DefaultPaymentMethod.ID == pm.ID {
+			method.IsDefault = true
+		}
+	}
+	
+	return method, nil
+}
+
+// UpdatePaymentMethod updates a payment method's details
+func (p *StripeProcessor) UpdatePaymentMethod(paymentMethodID, billingName string, metadata map[string]string) error {
+	params := &stripe.PaymentMethodParams{}
+	
+	// Update billing details if provided
+	if billingName != "" {
+		params.BillingDetails = &stripe.PaymentMethodBillingDetailsParams {
+			Name: stripe.String(billingName),
+		}
+	}
+	
+	// Update metadata if provided
+	if metadata != nil {
+		params.Metadata = make(map[string]string)
+		for k, v := range metadata {
+			params.AddMetadata(k, v)
+		}
+	}
+	
+	// Only make the API call if we have something to update
+	if billingName != "" || metadata != nil {
+		_, err := paymentmethod.Update(paymentMethodID, params)
+		if err != nil {
+			return fmt.Errorf("failed to update payment method: %w", err)
+		}
+	}
+	
+	return nil
+}
+
+// DetachPaymentMethod detaches a payment method from a customer
+func (p *StripeProcessor) DetachPaymentMethod(paymentMethodID string) error {
+	_, err := paymentmethod.Detach(paymentMethodID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to detach payment method: %w", err)
+	}
+	
+	return nil
+}
+
 // HandleWebhook processes Stripe webhooks
 func (p *StripeProcessor) HandleWebhook(body []byte, signature string) (interface{}, error) {
 	endpointSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")

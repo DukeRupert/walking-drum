@@ -12,34 +12,34 @@ type SubscriptionRequest struct {
 }
 
 type PriceRequest struct {
-    ProductID      string
-    UnitAmount     int64
-    Currency       string
-    Recurring      bool
-    IntervalType   string // "day", "week", "month", "year"
-    IntervalCount  int64
-    Nickname       string
-    Metadata       map[string]string
+	ProductID     string
+	UnitAmount    int64
+	Currency      string
+	Recurring     bool
+	IntervalType  string // "day", "week", "month", "year"
+	IntervalCount int64
+	Nickname      string
+	Metadata      map[string]string
 }
 
 type ProductRequest struct {
-    Name        string
-    Description string
-    Active      bool
-    Metadata    map[string]string
+	Name        string
+	Description string
+	Active      bool
+	Metadata    map[string]string
 }
 
 type CustomerRequest struct {
-    Email       string
-    Name        string
-    Description string
-    Metadata    map[string]string
+	Email       string
+	Name        string
+	Description string
+	Metadata    map[string]string
 }
 
 type PaymentMethodRequest struct {
-    CustomerID string
-    Type       string
-    Token      string // Use Stripe's card token instead of raw card data
+	CustomerID string
+	Type       string
+	Token      string // Use Stripe's card token instead of raw card data
 }
 
 // SubscriptionResponse represents a generic subscription response
@@ -68,18 +68,22 @@ type Processor interface {
 
 	// Price operations
 	CreatePrice(request PriceRequest) (string, error)
-    RetrievePrice(priceID string, params interface{}) (interface{}, error)
+	RetrievePrice(priceID string, params interface{}) (interface{}, error)
 
 	// Product operations
 	CreateProduct(request ProductRequest) (string, error)
-    RetrieveProduct(productID string, params interface{}) (interface{}, error)
+	RetrieveProduct(productID string, params interface{}) (interface{}, error)
 
-	// Payment operations
+	// Payment method operations
 	CreatePaymentMethod(request PaymentMethodRequest) (string, error)
-    AttachPaymentMethod(paymentMethodID string, customerID string) error
+	AttachPaymentMethod(paymentMethodID string, customerID string) error
 	AttachPaymentMethodIfNeeded(paymentMethodID string, customerID string) error
-    SetDefaultPaymentMethod(customerID string, paymentMethodID string) error
-	
+	SetDefaultPaymentMethod(customerID string, paymentMethodID string) error
+	ListPaymentMethods(customerID string) ([]PaymentMethod, error)
+	GetPaymentMethod(paymentMethodID string) (*PaymentMethod, error)
+	UpdatePaymentMethod(paymentMethodID, billingName string, metadata map[string]string) error
+	DetachPaymentMethod(paymentMethodID string) error
+
 	// Webhook handling
 	HandleWebhook(body []byte, signature string) (interface{}, error)
 }
