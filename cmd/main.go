@@ -85,6 +85,18 @@ func main() {
 	orderRepo := repository.NewOrderRepository(db)
 	orderItemRepo := repository.NewOrderItemRepository(db)
 
+	// Initialize services
+	paymentProcessor := payment.NewStripeProcessor()
+	paymentMethodService := payment.NewPaymentMethodService(paymentProcessor)
+	subscriptionService := services.NewSubscriptionService(
+		paymentProcessor,
+		subscriptionRepo,
+		userRepo,
+		priceRepo,
+		productRepo,
+		invoiceRepo,
+	)
+
 	// Initialize handlers
 	userHandler := handlers.NewUserHandler(userRepo)
 	productHandler := handlers.NewProductHandler(productRepo)
@@ -101,22 +113,17 @@ func main() {
 		priceRepo,
 		subscriptionRepo,
 	)
-
-	// Initialize payment processor
-	paymentProcessor := payment.NewStripeProcessor()
-
-	// Initialize subscription service
-	subscriptionService := services.NewSubscriptionService(
+	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
+	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodService)
+	webhookHandler := payment.NewWebhookHandler(
 		paymentProcessor,
 		subscriptionRepo,
-		userRepo,
-		priceRepo,
-		productRepo,
 		invoiceRepo,
+		userRepo,
+		productRepo,
+		priceRepo,
 	)
 
-	// Initialize subscription handler
-	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
 
 	// Set up router
 	router := mux.NewRouter()
@@ -180,10 +187,16 @@ func main() {
 	apiRouter.HandleFunc("/orders/{id}", orderHandler.DeleteOrder).Methods("DELETE")
 	apiRouter.HandleFunc("/users/{user_id}/orders", orderHandler.ListUserOrders).Methods("GET")
 
+	// Register webhook route
+	apiRouter.HandleFunc("/webhooks/stripe", webhookHandler.HandleWebhook).Methods("POST")
+
 	// Register subscription routes
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
 	apiRouter.HandleFunc("/subscriptions/{id}/cancel", subscriptionHandler.CancelSubscription).Methods("POST")
 	apiRouter.HandleFunc("/webhooks/payment", subscriptionHandler.HandleWebhook).Methods("POST")
+
+	// Register payment method routes
+	apiRouter.HandleFunc("/payment-methods", paymentMethodHandler.CreatePaymentMethod).Methods("POST")
 
 	// Start the HTTP server
 	port := "8080"

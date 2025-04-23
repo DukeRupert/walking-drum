@@ -36,6 +36,12 @@ type CustomerRequest struct {
     Metadata    map[string]string
 }
 
+type PaymentMethodRequest struct {
+    CustomerID string
+    Type       string
+    Token      string // Use Stripe's card token instead of raw card data
+}
+
 // SubscriptionResponse represents a generic subscription response
 type SubscriptionResponse struct {
 	ID                 string
@@ -67,6 +73,12 @@ type Processor interface {
 	// Product operations
 	CreateProduct(request ProductRequest) (string, error)
     RetrieveProduct(productID string, params interface{}) (interface{}, error)
+
+	// Payment operations
+	CreatePaymentMethod(request PaymentMethodRequest) (string, error)
+    AttachPaymentMethod(paymentMethodID string, customerID string) error
+	AttachPaymentMethodIfNeeded(paymentMethodID string, customerID string) error
+    SetDefaultPaymentMethod(customerID string, paymentMethodID string) error
 	
 	// Webhook handling
 	HandleWebhook(body []byte, signature string) (interface{}, error)
