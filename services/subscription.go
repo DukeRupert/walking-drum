@@ -888,6 +888,11 @@ func (s *SubscriptionService) GetUserSubscriptions(userID uuid.UUID, status stri
     return s.subscriptionRepo.GetByUserID(context.Background(), userID, status, limit, offset)
 }
 
+// GetCustomerSubscriptions retrieves all subscriptions for a customer with optional filtering
+func (s *SubscriptionService) GetCustomerSubscriptions(customerID string, status string, limit, offset int) ([]*models.Subscription, error) {
+    return s.subscriptionRepo.GetByCustomerID(context.Background(), customerID, status, limit, offset)
+}
+
 // UpdateSubscription updates an existing subscription
 func (s *SubscriptionService) UpdateSubscription(subscriptionID uuid.UUID, req UpdateSubscriptionRequest) (*models.Subscription, error) {
 	// Fetch the subscription

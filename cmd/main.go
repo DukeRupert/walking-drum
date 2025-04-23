@@ -189,6 +189,7 @@ func main() {
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
 	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.GetSubscription).Methods("GET")
 	apiRouter.HandleFunc("/users/{userID}/subscriptions", subscriptionHandler.GetUserSubscriptions).Methods("GET")
+	apiRouter.HandleFunc("/customers/{customerID}/subscriptions", subscriptionHandler.GetCustomerSubscriptions).Methods("GET")
 	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.UpdateSubscription).Methods("PUT")
 	apiRouter.HandleFunc("/subscriptions/{id}/cancel", subscriptionHandler.CancelSubscription).Methods("POST")
 	apiRouter.HandleFunc("/subscriptions/{id}/reactivate", subscriptionHandler.ReactivateSubscription).Methods("POST")

@@ -317,6 +317,98 @@ func (h *SubscriptionHandler) GetUserSubscriptions(w http.ResponseWriter, r *htt
 		Msg("Subscriptions returned successfully")
 }
 
+// GetUserSubscriptions retrieves all subscriptions for a stripe customer
+func (h *SubscriptionHandler) GetCustomerSubscriptions(w http.ResponseWriter, r *http.Request) {
+	logger := log.With().
+		Str("handler", "SubscriptionHandler").
+		Str("method", "GetCustomerSubscriptions").
+		Logger()
+
+	vars := mux.Vars(r)
+	customerID := vars["customerID"]
+    
+    if customerID == "" {
+        logger.Error().Msg("Customer ID is required")
+        http.Error(w, "Customer ID is required", http.StatusBadRequest)
+        return
+    }
+
+	logger.Debug().Str("customerID", customerID).Msg("Processing request")
+
+	// Get pagination parameters from query string
+	limit := 10 // Default limit
+	offset := 0 // Default offset
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if limitVal, err := strconv.Atoi(limitStr); err == nil && limitVal > 0 {
+			limit = limitVal
+		} else if err != nil {
+			logger.Debug().Err(err).Str("limit", limitStr).Msg("Invalid limit parameter")
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if offsetVal, err := strconv.Atoi(offsetStr); err == nil && offsetVal >= 0 {
+			offset = offsetVal
+		} else if err != nil {
+			logger.Debug().Err(err).Str("offset", offsetStr).Msg("Invalid offset parameter")
+		}
+	}
+
+	// Get status filter from query string
+	status := r.URL.Query().Get("status")
+
+	logger.Debug().
+		Str("customerID", customerID).
+		Str("status", status).
+		Int("limit", limit).
+		Int("offset", offset).
+		Msg("Retrieving subscriptions")
+
+	subscriptions, err := h.subscriptionService.GetCustomerSubscriptions(customerID, status, limit, offset)
+	if err != nil {
+		logger.Error().
+			Err(err).
+			Str("customerID", customerID).
+			Str("status", status).
+			Msg("Failed to retrieve subscriptions")
+		http.Error(w, "Failed to retrieve subscriptions: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	logger.Debug().
+		Int("count", len(subscriptions)).
+		Str("customerID", customerID).
+		Msg("Successfully retrieved subscriptions")
+
+	// Convert to response
+	var responses []map[string]interface{}
+	for _, sub := range subscriptions {
+		resp, err := NewSubscriptionResponse(sub)
+		if err != nil {
+			logger.Error().
+				Err(err).
+				Str("subscriptionID", sub.ID.String()).
+				Msg("Failed to generate subscription response")
+			http.Error(w, "Failed to generate response", http.StatusInternalServerError)
+			return
+		}
+		responses = append(responses, resp)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(responses); err != nil {
+		logger.Error().Err(err).Msg("Failed to encode JSON response")
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	logger.Info().
+		Str("customerID", customerID).
+		Int("count", len(responses)).
+		Msg("Subscriptions returned successfully")
+}
+
 // UpdateSubscription handles updating a subscription
 func (h *SubscriptionHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	logger := log.With().

@@ -25,6 +25,7 @@ type SubscriptionRepository interface {
 	GetByStripeSubscriptionID(ctx context.Context, stripeSubscriptionID string) (*models.Subscription, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]*models.Subscription, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID, status string, limit, offset int) ([]*models.Subscription, error)
+    GetByCustomerID(ctx context.Context, customerID string, status string, limit, offset int) ([]*models.Subscription, error)
 	Update(ctx context.Context, subscription *models.Subscription) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, limit, offset int) ([]*models.Subscription, error)
@@ -445,6 +446,130 @@ func (r *PostgresSubscriptionRepository) GetByUserID(ctx context.Context, userID
     rows, err := r.db.QueryContext(ctx, query, args...)
     if err != nil {
         return nil, fmt.Errorf("error listing subscriptions by user ID: %w", err)
+    }
+    defer rows.Close()
+
+    var subscriptions []*models.Subscription
+
+    for rows.Next() {
+        var subscription models.Subscription
+        var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
+        var metadata sql.NullString
+
+        err := rows.Scan(
+            &subscription.ID,
+            &subscription.UserID,
+            &subscription.PriceID,
+            &subscription.Quantity,
+            &subscription.Status,
+            &subscription.CurrentPeriodStart,
+            &subscription.CurrentPeriodEnd,
+            &cancelAt,
+            &canceledAt,
+            &endedAt,
+            &trialStart,
+            &trialEnd,
+            &subscription.CreatedAt,
+            &subscription.UpdatedAt,
+            &subscription.StripeSubscriptionID,
+            &subscription.StripeCustomerID,
+            &subscription.CollectionMethod,
+            &subscription.CancelAtPeriodEnd,
+            &metadata,
+            &resumeAt,
+        )
+
+        if err != nil {
+            return nil, fmt.Errorf("error scanning subscription row: %w", err)
+        }
+
+        if cancelAt.Valid {
+            t := cancelAt.Time
+            subscription.CancelAt = &t
+        }
+
+        if canceledAt.Valid {
+            t := canceledAt.Time
+            subscription.CanceledAt = &t
+        }
+
+        if endedAt.Valid {
+            t := endedAt.Time
+            subscription.EndedAt = &t
+        }
+
+        if trialStart.Valid {
+            t := trialStart.Time
+            subscription.TrialStart = &t
+        }
+
+        if trialEnd.Valid {
+            t := trialEnd.Time
+            subscription.TrialEnd = &t
+        }
+
+        if resumeAt.Valid {
+            t := resumeAt.Time
+            subscription.ResumeAt = &t
+        }
+
+        // Handle JSON metadata conversion if needed
+
+        subscriptions = append(subscriptions, &subscription)
+    }
+
+    if err = rows.Err(); err != nil {
+        return nil, fmt.Errorf("error iterating subscription rows: %w", err)
+    }
+
+    return subscriptions, nil
+}
+
+func (r *PostgresSubscriptionRepository) GetByCustomerID(ctx context.Context, customerID string, status string, limit, offset int) ([]*models.Subscription, error) {
+    if limit <= 0 {
+        limit = 10 // Default limit
+    }
+
+    var query string
+    var args []interface{}
+
+    if status != "" {
+        // Query with status filter
+        query = `
+            SELECT 
+                id, user_id, price_id, quantity, status, 
+                current_period_start, current_period_end, cancel_at, 
+                canceled_at, ended_at, trial_start, trial_end, 
+                created_at, updated_at, stripe_subscription_id, 
+                stripe_customer_id, collection_method, 
+                cancel_at_period_end, metadata, resume_at
+            FROM subscriptions
+            WHERE stripe_customer_id = $1 AND status = $2
+            ORDER BY created_at DESC
+            LIMIT $3 OFFSET $4
+        `
+        args = []interface{}{customerID, status, limit, offset}
+    } else {
+        // Query without status filter
+        query = `
+            SELECT 
+                id, user_id, price_id, quantity, status, 
+                current_period_start, current_period_end, cancel_at, 
+                canceled_at, ended_at, trial_start, trial_end, 
+                created_at, updated_at, stripe_subscription_id, 
+                stripe_customer_id, collection_method, 
+                cancel_at_period_end, metadata, resume_at
+            FROM subscriptions
+            WHERE stripe_customer_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+        `
+        args = []interface{}{customerID, limit, offset}
+    }
+
+    rows, err := r.db.QueryContext(ctx, query, args...)
+    if err != nil {
+        return nil, fmt.Errorf("error listing subscriptions by customer ID: %w", err)
     }
     defer rows.Close()
 
