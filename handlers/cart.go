@@ -1209,211 +1209,496 @@ func (h *CartHandler) UpdateCartItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) RemoveCartItem(w http.ResponseWriter, r *http.Request) {
-	logger := log.With().
-		Str("handler", "CartHandler").
-		Str("method", "RemoveCartItem").
-		Logger()
+    logger := log.With().
+        Str("handler", "CartHandler").
+        Str("method", "RemoveCartItem").
+        Logger()
 
-	logger.Debug().Msg("Processing remove cart item request")
+    logger.Debug().Msg("Processing remove cart item request")
 
-	vars := mux.Vars(r)
-	cartIDStr := vars["id"]
-	itemIDStr := vars["item_id"]
+    vars := mux.Vars(r)
+    cartIDStr := vars["id"]
+    itemIDStr := vars["item_id"]
 
-	logger.Debug().
-		Str("cartIdRaw", cartIDStr).
-		Str("itemIdRaw", itemIDStr).
-		Msg("Extracting IDs from path")
+    logger.Debug().
+        Str("cartIdRaw", cartIDStr).
+        Str("itemIdRaw", itemIDStr).
+        Msg("Extracting IDs from path")
 
-	cartID, err := uuid.Parse(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid cart ID", http.StatusBadRequest)
-		return
-	}
+    cartID, err := uuid.Parse(cartIDStr) // Use the local variable instead of vars["id"]
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartIdRaw", cartIDStr).
+            Msg("Invalid cart ID format") // Add this error log
+        http.Error(w, "Invalid cart ID", http.StatusBadRequest)
+        return
+    }
 
-	itemID, err := uuid.Parse(vars["item_id"])
-	if err != nil {
-		http.Error(w, "Invalid item ID", http.StatusBadRequest)
-		return
-	}
+    itemID, err := uuid.Parse(itemIDStr) // Use the local variable instead of vars["item_id"]
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Str("itemIdRaw", itemIDStr).
+            Msg("Invalid item ID format") // Add this error log
+        http.Error(w, "Invalid item ID", http.StatusBadRequest)
+        return
+    }
 
-	// Verify cart exists
-	logger.Debug().
-		Str("cartId", cartID.String()).
-		Str("itemId", itemID.String()).
-		Msg("Verifying cart exists")
+    // Verify cart exists
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Str("itemId", itemID.String()).
+        Msg("Verifying cart exists")
 
-	_, err = h.cartRepo.GetByID(r.Context(), cartID)
-	if err != nil {
-		if errors.Is(err, repository.ErrCartNotFound) {
-			logger.Error().
-				Err(err).
-				Str("cartId", cartID.String()).
-				Str("itemId", itemID.String()).
-				Msg("Cart not found")
-			http.Error(w, "Cart not found", http.StatusNotFound)
-			return
-		}
-		logger.Error().
-			Err(err).
-			Str("cartId", cartID.String()).
-			Str("itemId", itemID.String()).
-			Msg("Failed to verify cart")
-		http.Error(w, "Failed to verify cart", http.StatusInternalServerError)
-		return
-	}
+    _, err = h.cartRepo.GetByID(r.Context(), cartID)
+    if err != nil {
+        if errors.Is(err, repository.ErrCartNotFound) {
+            logger.Error().
+                Err(err).
+                Str("cartId", cartID.String()).
+                Str("itemId", itemID.String()).
+                Msg("Cart not found")
+            http.Error(w, "Cart not found", http.StatusNotFound)
+            return
+        }
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Str("itemId", itemID.String()).
+            Msg("Failed to verify cart")
+        http.Error(w, "Failed to verify cart", http.StatusInternalServerError)
+        return
+    }
 
-	// Get the cart item to verify ownership
-	cartItem, err := h.cartItemRepo.GetByID(r.Context(), itemID)
-	if err != nil {
-		if errors.Is(err, repository.ErrCartItemNotFound) {
-			logger.Error().
-				Err(err).
-				Str("cartId", cartID.String()).
-				Str("itemId", itemID.String()).
-				Msg("Cart item not found")
-			http.Error(w, "Cart item not found", http.StatusNotFound)
-			return
-		}
-		logger.Error().
-			Err(err).
-			Str("cartId", cartID.String()).
-			Str("itemId", itemID.String()).
-			Msg("Failed to get cart item")
-		http.Error(w, "Failed to get cart item", http.StatusInternalServerError)
-		return
-	}
+    // Get the cart item to verify ownership
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Str("itemId", itemID.String()).
+        Msg("Retrieving cart item") // Add this debug log
+        
+    cartItem, err := h.cartItemRepo.GetByID(r.Context(), itemID)
+    if err != nil {
+        if errors.Is(err, repository.ErrCartItemNotFound) {
+            logger.Error().
+                Err(err).
+                Str("cartId", cartID.String()).
+                Str("itemId", itemID.String()).
+                Msg("Cart item not found")
+            http.Error(w, "Cart item not found", http.StatusNotFound)
+            return
+        }
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Str("itemId", itemID.String()).
+            Msg("Failed to get cart item")
+        http.Error(w, "Failed to get cart item", http.StatusInternalServerError)
+        return
+    }
 
-	// Verify the item belongs to the cart
-	if cartItem.CartID != cartID {
-		logger.Error().
-			Str("cartId", cartID.String()).
-			Str("itemId", itemID.String()).
-			Str("itemCartId", cartItem.CartID.String()).
-			Msg("Cart item does not belong to the specified cart")
-		http.Error(w, "Cart item does not belong to the specified cart", http.StatusBadRequest)
-		return
-	}
+    // Add more context about the item being removed
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Str("itemId", itemID.String()).
+        Str("productId", cartItem.ProductID.String()).
+        Int("quantity", cartItem.Quantity).
+        Int64("unitPrice", cartItem.UnitPrice).
+        Msg("Found cart item, verifying ownership")
 
-	// Delete the cart item
-	err = h.cartItemRepo.Delete(r.Context(), itemID)
-	if err != nil {
-		logger.Error().
-			Str("cartId", cartID.String()).
-			Str("itemId", itemID.String()).
-			Str("itemCartId", cartItem.CartID.String()).
-			Msg("Failed to remove cart item")
-		http.Error(w, "Failed to remove cart item", http.StatusInternalServerError)
-		return
-	}
+    // Verify the item belongs to the cart
+    if cartItem.CartID != cartID {
+        logger.Error().
+            Str("cartId", cartID.String()).
+            Str("itemId", itemID.String()).
+            Str("itemCartId", cartItem.CartID.String()).
+            Msg("Cart item does not belong to the specified cart")
+        http.Error(w, "Cart item does not belong to the specified cart", http.StatusBadRequest)
+        return
+    }
 
-	// Return the updated cart
-	updatedCart, err := h.cartRepo.GetByID(r.Context(), cartID)
-	if err != nil {
-		logger.Error().
-			Str("cartId", cartID.String()).
-			Str("itemId", itemID.String()).
-			Str("itemCartId", cartItem.CartID.String()).
-			Msg("Failed to get updated cart")
-		http.Error(w, "Failed to get updated cart", http.StatusInternalServerError)
-		return
-	}
+    // Delete the cart item
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Str("itemId", itemID.String()).
+        Msg("Removing cart item from database") // Add this debug log
+        
+    err = h.cartItemRepo.Delete(r.Context(), itemID)
+    if err != nil {
+        logger.Error().
+            Err(err). // Add the error
+            Str("cartId", cartID.String()).
+            Str("itemId", itemID.String()).
+            Msg("Failed to remove cart item")
+        http.Error(w, "Failed to remove cart item", http.StatusInternalServerError)
+        return
+    }
 
-	response, err := h.cartToResponse(r.Context(), updatedCart, true)
-	if err != nil {
-		logger.Error().
-			Str("cartId", cartID.String()).
-			Str("itemId", itemID.String()).
-			Str("itemCartId", cartItem.CartID.String()).
-			Msg("Failed to generate response")
-		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
-		return
-	}
+    logger.Info().
+        Str("cartId", cartID.String()).
+        Str("itemId", itemID.String()).
+        Str("productId", cartItem.ProductID.String()).
+        Msg("Cart item removed successfully") // Add this info log for the successful removal
 
-	logger.Debug().
-	Str("cartId", cartID.String()).
-	Msg("Response generated, sending to client")
+    // Return the updated cart
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Retrieving updated cart") // Add this debug log
+        
+    updatedCart, err := h.cartRepo.GetByID(r.Context(), cartID)
+    if err != nil {
+        logger.Error().
+            Err(err). // Add the error
+            Str("cartId", cartID.String()).
+            Msg("Failed to get updated cart")
+        http.Error(w, "Failed to get updated cart", http.StatusInternalServerError)
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Int("remainingItems", len(updatedCart.Items)). // Add count of remaining items
+        Msg("Generating cart response")
+        
+    response, err := h.cartToResponse(r.Context(), updatedCart, true)
+    if err != nil {
+        logger.Error().
+            Err(err). // Add the error
+            Str("cartId", cartID.String()).
+            Msg("Failed to generate response")
+        http.Error(w, "Failed to generate response", http.StatusInternalServerError)
+        return
+    }
+
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Response generated, sending to client")
+
+    w.Header().Set("Content-Type", "application/json")
+    if err := json.NewEncoder(w).Encode(response); err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Msg("Failed to encode JSON response") // Add this error log
+        http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+        return
+    }
+    
+    // Add a final success log with cart statistics
+    var totalQuantity int
+    var totalValue int64
+    
+    for _, item := range updatedCart.Items {
+        totalQuantity += item.Quantity
+        totalValue += item.UnitPrice * int64(item.Quantity)
+    }
+    
+    logger.Info().
+        Str("cartId", cartID.String()).
+        Str("removedItemId", itemID.String()).
+        Str("productId", cartItem.ProductID.String()).
+        Int("remainingItems", len(updatedCart.Items)).
+        Int("totalQuantity", totalQuantity).
+        Int64("totalValue", totalValue).
+        Msg("Cart updated successfully after item removal")
 }
 
 func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	cartID, err := uuid.Parse(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid cart ID", http.StatusBadRequest)
-		return
-	}
+    logger := log.With().
+        Str("handler", "CartHandler").
+        Str("method", "ClearCart").
+        Logger()
 
-	// Verify cart exists
-	cart, err := h.cartRepo.GetByID(r.Context(), cartID)
-	if err != nil {
-		if errors.Is(err, repository.ErrCartNotFound) {
-			http.Error(w, "Cart not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, "Failed to verify cart", http.StatusInternalServerError)
-		return
-	}
+    logger.Debug().Msg("Processing clear cart request")
 
-	// Delete all items in the cart
-	err = h.cartItemRepo.DeleteByCartID(r.Context(), cartID)
-	if err != nil {
-		http.Error(w, "Failed to clear cart", http.StatusInternalServerError)
-		return
-	}
+    vars := mux.Vars(r)
+    cartIDStr := vars["id"]
+    logger.Debug().Str("cartIdRaw", cartIDStr).Msg("Extracting cart ID from path")
 
-	response, err := h.cartToResponse(r.Context(), cart, true)
-	if err != nil {
-		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
-		return
-	}
+    cartID, err := uuid.Parse(cartIDStr)
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartIdRaw", cartIDStr).
+            Msg("Invalid cart ID format")
+        http.Error(w, "Invalid cart ID", http.StatusBadRequest)
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Verifying cart exists")
+
+    // Verify cart exists
+    cart, err := h.cartRepo.GetByID(r.Context(), cartID)
+    if err != nil {
+        if errors.Is(err, repository.ErrCartNotFound) {
+            logger.Error().
+                Err(err).
+                Str("cartId", cartID.String()).
+                Msg("Cart not found")
+            http.Error(w, "Cart not found", http.StatusNotFound)
+            return
+        }
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Msg("Failed to verify cart")
+        http.Error(w, "Failed to verify cart", http.StatusInternalServerError)
+        return
+    }
+
+    // Log cart details before clearing
+    itemCount := len(cart.Items)
+    var totalQuantity int
+    var totalValue int64
+    
+    for _, item := range cart.Items {
+        totalQuantity += item.Quantity
+        totalValue += item.UnitPrice * int64(item.Quantity)
+    }
+    
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Int("itemCount", itemCount).
+        Int("totalQuantity", totalQuantity).
+        Int64("totalValue", totalValue).
+        Msg("Cart found, proceeding to clear all items")
+
+    // Delete all items in the cart
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Removing all items from cart")
+        
+    err = h.cartItemRepo.DeleteByCartID(r.Context(), cartID)
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Msg("Failed to clear cart")
+        http.Error(w, "Failed to clear cart", http.StatusInternalServerError)
+        return
+    }
+
+    logger.Info().
+        Str("cartId", cartID.String()).
+        Int("itemsRemoved", itemCount).
+        Int("quantityRemoved", totalQuantity).
+        Int64("valueRemoved", totalValue).
+        Msg("Cart cleared successfully")
+
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Generating cart response")
+        
+    response, err := h.cartToResponse(r.Context(), cart, true)
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Msg("Failed to generate response")
+        http.Error(w, "Failed to generate response", http.StatusInternalServerError)
+        return
+    }
+
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Response generated, sending to client")
+
+    w.Header().Set("Content-Type", "application/json")
+    if err := json.NewEncoder(w).Encode(response); err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Msg("Failed to encode JSON response")
+        http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+        return
+    }
+
+    // Final success log with context
+    logEvent := logger.Info().
+        Str("cartId", cartID.String())
+
+    if cart.UserID != nil {
+        logEvent = logEvent.Str("userId", cart.UserID.String())
+    }
+
+    if cart.SessionID != nil {
+        logEvent = logEvent.Str("sessionId", *cart.SessionID)
+    }
+
+    logEvent.Msg("Cart response sent successfully")
 }
 
 func (h *CartHandler) DeleteCart(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	cartID, err := uuid.Parse(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid cart ID", http.StatusBadRequest)
-		return
-	}
+    logger := log.With().
+        Str("handler", "CartHandler").
+        Str("method", "DeleteCart").
+        Logger()
 
-	// Verify cart exists
-	_, err = h.cartRepo.GetByID(r.Context(), cartID)
-	if err != nil {
-		if errors.Is(err, repository.ErrCartNotFound) {
-			http.Error(w, "Cart not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, "Failed to verify cart", http.StatusInternalServerError)
-		return
-	}
+    logger.Debug().Msg("Processing delete cart request")
 
-	// Delete the cart (this will cascade to delete cart items due to foreign key constraint)
-	err = h.cartRepo.Delete(r.Context(), cartID)
-	if err != nil {
-		http.Error(w, "Failed to delete cart", http.StatusInternalServerError)
-		return
-	}
+    vars := mux.Vars(r)
+    cartIDStr := vars["id"]
+    logger.Debug().Str("cartIdRaw", cartIDStr).Msg("Extracting cart ID from path")
 
-	w.WriteHeader(http.StatusNoContent)
+    cartID, err := uuid.Parse(cartIDStr)
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartIdRaw", cartIDStr).
+            Msg("Invalid cart ID format")
+        http.Error(w, "Invalid cart ID", http.StatusBadRequest)
+        return
+    }
+
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Verifying cart exists")
+
+    // Verify cart exists
+    cart, err := h.cartRepo.GetByID(r.Context(), cartID)
+    if err != nil {
+        if errors.Is(err, repository.ErrCartNotFound) {
+            logger.Error().
+                Err(err).
+                Str("cartId", cartID.String()).
+                Msg("Cart not found")
+            http.Error(w, "Cart not found", http.StatusNotFound)
+            return
+        }
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Msg("Failed to verify cart")
+        http.Error(w, "Failed to verify cart", http.StatusInternalServerError)
+        return
+    }
+
+    // Log cart details before deleting
+    itemCount := len(cart.Items)
+    var totalQuantity int
+    var totalValue int64
+    
+    for _, item := range cart.Items {
+        totalQuantity += item.Quantity
+        totalValue += item.UnitPrice * int64(item.Quantity)
+    }
+    
+    // Build context for the log
+    logCtx := logger.Debug().
+        Str("cartId", cartID.String()).
+        Int("itemCount", itemCount)
+        
+    if cart.UserID != nil {
+        logCtx = logCtx.Str("userId", cart.UserID.String())
+    }
+    
+    if cart.SessionID != nil {
+        logCtx = logCtx.Str("sessionId", *cart.SessionID)
+    }
+    
+    if cart.ExpiresAt != nil {
+        logCtx = logCtx.Time("expiresAt", *cart.ExpiresAt)
+    }
+
+    logCtx.Msg("Cart found, proceeding to delete")
+
+    // Delete the cart
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Deleting cart from database")
+        
+    err = h.cartRepo.Delete(r.Context(), cartID)
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Str("cartId", cartID.String()).
+            Msg("Failed to delete cart")
+        http.Error(w, "Failed to delete cart", http.StatusInternalServerError)
+        return
+    }
+
+    // Build context for the success log
+    successCtx := logger.Info().
+        Str("cartId", cartID.String()).
+        Int("itemsDeleted", itemCount).
+        Int("quantityDeleted", totalQuantity).
+        Int64("valueDeleted", totalValue)
+        
+    if cart.UserID != nil {
+        successCtx = successCtx.Str("userId", cart.UserID.String())
+    }
+    
+    if cart.SessionID != nil {
+        successCtx = successCtx.Str("sessionId", *cart.SessionID)
+    }
+    
+    if cart.ExpiresAt != nil {
+        successCtx = successCtx.Time("expiresAt", *cart.ExpiresAt)
+    }
+
+    successCtx.Msg("Cart deleted successfully")
+
+    logger.Debug().
+        Str("cartId", cartID.String()).
+        Msg("Sending no content response")
+
+    w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *CartHandler) CleanExpiredCarts(w http.ResponseWriter, r *http.Request) {
-	// This endpoint should be protected by admin authentication
+    logger := log.With().
+        Str("handler", "CartHandler").
+        Str("method", "CleanExpiredCarts").
+        Logger()
 
-	count, err := h.cartRepo.CleanExpiredCarts(r.Context())
-	if err != nil {
-		http.Error(w, "Failed to clean expired carts", http.StatusInternalServerError)
-		return
-	}
+    logger.Debug().Msg("Processing clean expired carts request")
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"deleted_count": count})
+    // Log user/admin information if available from the request context
+    if user := r.Context().Value("user"); user != nil {
+        if userID, ok := user.(string); ok {
+            logger.Debug().
+                Str("adminUser", userID).
+                Msg("Admin user identified")
+        }
+    }
+
+    logger.Debug().Msg("Cleaning expired carts from database")
+
+    count, err := h.cartRepo.CleanExpiredCarts(r.Context())
+    if err != nil {
+        logger.Error().
+            Err(err).
+            Msg("Failed to clean expired carts")
+        http.Error(w, "Failed to clean expired carts", http.StatusInternalServerError)
+        return
+    }
+
+    logger.Info().
+        Int("deletedCount", count).
+        Msg("Expired carts cleaned successfully")
+
+    logger.Debug().
+        Int("deletedCount", count).
+        Msg("Generating response")
+
+    w.Header().Set("Content-Type", "application/json")
+    responseData := map[string]int{"deleted_count": count}
+
+    if err := json.NewEncoder(w).Encode(responseData); err != nil {
+        logger.Error().
+            Err(err).
+            Int("deletedCount", count).
+            Msg("Failed to encode JSON response")
+        http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+        return
+    }
+
+    logger.Debug().
+        Int("deletedCount", count).
+        Msg("Response sent successfully")
 }
 
 // Helper functions
