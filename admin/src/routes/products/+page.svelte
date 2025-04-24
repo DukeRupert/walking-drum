@@ -5,7 +5,6 @@
 	import { enhance } from '$app/forms';
 
 	let { data, form }: PageProps = $props();
-	$inspect(form)
 	let { products, pagination, error } = $derived(data);
 
 	// State for Create Product
@@ -225,7 +224,7 @@
 									class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0"
 								>
 									<a
-										href="/admin/products/{product.id}"
+										href="/products/{product.id}"
 										class="mr-4 text-indigo-600 hover:text-indigo-900"
 									>
 										Edit<span class="sr-only">, {product.name}</span>
