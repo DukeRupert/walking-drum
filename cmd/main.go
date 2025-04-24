@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/dukerupert/walking-drum/handlers"
+	"github.com/dukerupert/walking-drum/middleware"
 	"github.com/dukerupert/walking-drum/repository"
 	"github.com/dukerupert/walking-drum/services"
 	"github.com/dukerupert/walking-drum/services/payment"
@@ -131,6 +132,7 @@ func main() {
 	http.Handle("/", router)
 
 	apiRouter := router.PathPrefix("/api").Subrouter()
+	apiRouter.Use(middleware.EnableCORS)
 
 	// Register user routes
 	apiRouter.HandleFunc("/users", userHandler.CreateUser).Methods("POST")
