@@ -193,7 +193,7 @@
 									type="text"
 									name="name"
 									id="name"
-									value={form?.values?.name !== undefined ? form.values.name : product.name}
+									value={form?.product?.name !== undefined ? form.product.name : product.name}
 									required
 									class="block w-full rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
 								/>
@@ -211,8 +211,8 @@
 									name="description"
 									rows="4"
 									class="block w-full rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-									>{form?.values?.description !== undefined
-										? form.values.description
+									>{form?.product?.description !== undefined
+										? form.product.description
 										: product.description}</textarea
 								>
 							</div>
@@ -226,8 +226,8 @@
 									name="is_active"
 									type="checkbox"
 									value="true"
-									checked={form?.values?.isActive !== undefined
-										? form.values.isActive
+									checked={form?.product?.is_active !== undefined
+										? form.product.is_active
 										: product.is_active}
 									class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
 								/>
