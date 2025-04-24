@@ -5,11 +5,16 @@
 	import { enhance } from '$app/forms';
 
 	let { data, form }: PageProps = $props();
-	let { products, pagination, error } = data;
+	$inspect(form)
+	let { products, pagination, error } = $derived(data);
 
-	// Form state
+	// State for Create Product
 	let showAddModal = $state(false);
 	let metadataFields = $state([{ key: '', value: '' }]);
+
+	// State for Delete Product
+	let showDeleteModal = $state(false);
+	let productToDelete = $state({ id: '', name: '' });
 
 	function openAddModal() {
 		// Reset form state
@@ -31,14 +36,31 @@
 		metadataFields = metadataFields.filter((_, i) => i !== index);
 	}
 
+	// Functions for Delete Product modal
+	function openDeleteModal(product: { id: string; name: string }) {
+		productToDelete = product;
+		showDeleteModal = true;
+	}
+
+	function closeDeleteModal() {
+		showDeleteModal = false;
+		productToDelete = { id: '', name: '' };
+	}
+
 	// Triggered after a successful form submission
-	function handleSuccess() {
+	function handleCreateSuccess() {
 		// Close the modal after a short delay to show the success message
 		setTimeout(() => {
 			closeAddModal();
-			// Reload the page to show the updated product list
-			window.location.reload();
-		}, 1500);
+		}, 750);
+	}
+
+	// Triggered after a successful form submission
+	function handleDeleteSuccess() {
+		// Close the modal after a short delay to show the success message
+		setTimeout(() => {
+			closeDeleteModal();
+		}, 750);
 	}
 
 	function formatDate(dateString: string) {
@@ -85,7 +107,10 @@
 	// Check if form submission was successful
 	$effect(() => {
 		if (form?.success && showAddModal) {
-			handleSuccess();
+			handleCreateSuccess();
+		}
+		if (form?.deleteSuccess && showDeleteModal) {
+			handleDeleteSuccess();
 		}
 	});
 </script>
@@ -205,7 +230,10 @@
 									>
 										Edit<span class="sr-only">, {product.name}</span>
 									</a>
-									<button class="text-red-600 hover:text-red-900">
+									<button
+										class="text-red-600 hover:text-red-900"
+										onclick={() => openDeleteModal({ id: product.id, name: product.name })}
+									>
 										Delete<span class="sr-only">, {product.name}</span>
 									</button>
 								</td>
@@ -283,180 +311,322 @@
 	</div>
 </div>
 
-
 <!-- Add Product Modal -->
 {#if showAddModal}
-  <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-10"></div>
-  
-  <div class="fixed inset-0 z-10 overflow-y-auto">
-    <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-      <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-        <div class="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
-          <button 
-            type="button" 
-            onclick={closeAddModal}
-            class="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            <span class="sr-only">Close</span>
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        
-        <div class="sm:flex sm:items-start">
-          <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
-            <h3 class="text-base font-semibold leading-6 text-gray-900">Add New Product</h3>
-            
-            {#if form?.success}
-              <div class="mt-2 rounded-md bg-green-50 p-4">
-                <div class="flex">
-                  <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.565a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
-                    </svg>
-                  </div>
-                  <div class="ml-3">
-                    <p class="text-sm font-medium text-green-800">Product created successfully!</p>
-                  </div>
-                </div>
-              </div>
-            {:else}
-              <div class="mt-2">
-                <form method="POST" action="?/createProduct" use:enhance>
-                  {#if form?.error}
-                    <div class="rounded-md bg-red-50 p-2 text-sm text-red-700 mb-4">
-                      {form.error}
-                    </div>
-                  {/if}
-                  
-                  <!-- Name field -->
-                  <div class="mb-4">
-                    <label for="name" class="block text-sm font-medium leading-6 text-gray-900">
-                      Name <span class="text-red-500">*</span>
-                    </label>
-                    <div class="mt-2">
-                      <input
-                        type="text"
-                        name="name"
-                        id="name"
-                        value={form?.values?.name || ''}
-                        required
-                        class="block w-full rounded-md border-0 py-1.5 px-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                      />
-                    </div>
-                  </div>
-                  
-                  <!-- Description field -->
-                  <div class="mb-4">
-                    <label for="description" class="block text-sm font-medium leading-6 text-gray-900">
-                      Description
-                    </label>
-                    <div class="mt-2">
-                      <textarea
-                        id="description"
-                        name="description"
-                        rows="3"
-                        value={form?.values?.description || ''}
-                        class="block w-full rounded-md border-0 py-1.5 px-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                      ></textarea>
-                    </div>
-                  </div>
-                  
-                  <!-- Is Active field -->
-                  <div class="relative flex items-start mb-4">
-                    <div class="flex h-6 items-center">
-                      <input
-                        id="is_active"
-                        name="is_active"
-                        type="checkbox"
-                        value="true"
-                        checked={form?.values?.isActive !== false}
-                        class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
-                      />
-                    </div>
-                    <div class="ml-3 text-sm leading-6">
-                      <label for="is_active" class="font-medium text-gray-900">Active</label>
-                      <p class="text-gray-500">Make this product active and available immediately</p>
-                    </div>
-                  </div>
-                  
-                  <!-- Metadata fields -->
-                  <div class="mb-4">
-                    <div class="flex justify-between items-center">
-                      <label class="block text-sm font-medium leading-6 text-gray-900">
-                        Metadata (Optional)
-                      </label>
-                      <button 
-                        type="button" 
-                        onclick={addMetadataField}
-                        class="text-sm text-indigo-600 hover:text-indigo-500"
-                      >
-                        + Add field
-                      </button>
-                    </div>
-                    
-                    <div class="mt-2 space-y-2">
-                      {#each metadataFields as field, index}
-                        <div class="flex space-x-2">
-                          <div class="w-1/3">
-                            <input
-                              type="text"
-                              name="metadata_key"
-                              placeholder="Key"
-                              bind:value={field.key}
-                              class="block w-full rounded-md border-0 py-1.5 px-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                            />
-                          </div>
-                          <div class="flex-1">
-                            <input
-                              type="text"
-                              name="metadata_value"
-                              placeholder="Value"
-                              bind:value={field.value}
-                              class="block w-full rounded-md border-0 py-1.5 px-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                            />
-                          </div>
-                          {#if index > 0 || metadataFields.length > 1}
-                            <button 
-                              type="button" 
-                              onclick={() => removeMetadataField(index)}
-                              class="inline-flex items-center rounded-md text-sm font-medium text-red-600 hover:text-red-500"
-                            >
-                              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
-                              </svg>
-                            </button>
-                          {/if}
-                        </div>
-                      {/each}
-                    </div>
-                    <p class="mt-1 text-xs text-gray-500">
-                      For JSON values like numbers or booleans, use valid JSON syntax (e.g., true, 42, "string")
-                    </p>
-                  </div>
-                  
-                  <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                    <button
-                      type="submit"
-                      class="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:ml-3 sm:w-auto"
-                    >
-                      Create Product
-                    </button>
-                    <button
-                      type="button"
-                      onclick={closeAddModal}
-                      class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              </div>
-            {/if}
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+	<div class="fixed inset-0 z-10 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+	<div class="fixed inset-0 z-10 overflow-y-auto">
+		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+			<div
+				class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6"
+			>
+				<div class="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
+					<button
+						type="button"
+						onclick={closeAddModal}
+						class="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+					>
+						<span class="sr-only">Close</span>
+						<svg
+							class="h-6 w-6"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							aria-hidden="true"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+
+				<div class="sm:flex sm:items-start">
+					<div class="mt-3 w-full text-center sm:ml-4 sm:mt-0 sm:text-left">
+						<h3 class="text-base font-semibold leading-6 text-gray-900">Add New Product</h3>
+
+						{#if form?.success}
+							<div class="mt-2 rounded-md bg-green-50 p-4">
+								<div class="flex">
+									<div class="flex-shrink-0">
+										<svg
+											class="h-5 w-5 text-green-400"
+											viewBox="0 0 20 20"
+											fill="currentColor"
+											aria-hidden="true"
+										>
+											<path
+												fill-rule="evenodd"
+												d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.565a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
+												clip-rule="evenodd"
+											/>
+										</svg>
+									</div>
+									<div class="ml-3">
+										<p class="text-sm font-medium text-green-800">Product created successfully!</p>
+									</div>
+								</div>
+							</div>
+						{:else}
+							<div class="mt-2">
+								<form method="POST" action="?/createProduct" use:enhance>
+									{#if form?.error}
+										<div class="mb-4 rounded-md bg-red-50 p-2 text-sm text-red-700">
+											{form.error}
+										</div>
+									{/if}
+
+									<!-- Name field -->
+									<div class="mb-4">
+										<label for="name" class="block text-sm font-medium leading-6 text-gray-900">
+											Name <span class="text-red-500">*</span>
+										</label>
+										<div class="mt-2">
+											<input
+												type="text"
+												name="name"
+												id="name"
+												value={form?.values?.name || ''}
+												required
+												class="block w-full rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+											/>
+										</div>
+									</div>
+
+									<!-- Description field -->
+									<div class="mb-4">
+										<label
+											for="description"
+											class="block text-sm font-medium leading-6 text-gray-900"
+										>
+											Description
+										</label>
+										<div class="mt-2">
+											<textarea
+												id="description"
+												name="description"
+												rows="3"
+												value={form?.values?.description || ''}
+												class="block w-full rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+											></textarea>
+										</div>
+									</div>
+
+									<!-- Is Active field -->
+									<div class="relative mb-4 flex items-start">
+										<div class="flex h-6 items-center">
+											<input
+												id="is_active"
+												name="is_active"
+												type="checkbox"
+												value="true"
+												checked={form?.values?.isActive !== false}
+												class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+											/>
+										</div>
+										<div class="ml-3 text-sm leading-6">
+											<label for="is_active" class="font-medium text-gray-900">Active</label>
+											<p class="text-gray-500">
+												Make this product active and available immediately
+											</p>
+										</div>
+									</div>
+
+									<!-- Metadata fields -->
+									<div class="mb-4">
+										<div class="flex items-center justify-between">
+											<label class="block text-sm font-medium leading-6 text-gray-900">
+												Metadata (Optional)
+											</label>
+											<button
+												type="button"
+												onclick={addMetadataField}
+												class="text-sm text-indigo-600 hover:text-indigo-500"
+											>
+												+ Add field
+											</button>
+										</div>
+
+										<div class="mt-2 space-y-2">
+											{#each metadataFields as field, index}
+												<div class="flex space-x-2">
+													<div class="w-1/3">
+														<input
+															type="text"
+															name="metadata_key"
+															placeholder="Key"
+															bind:value={field.key}
+															class="block w-full rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+														/>
+													</div>
+													<div class="flex-1">
+														<input
+															type="text"
+															name="metadata_value"
+															placeholder="Value"
+															bind:value={field.value}
+															class="block w-full rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+														/>
+													</div>
+													{#if index > 0 || metadataFields.length > 1}
+														<button
+															type="button"
+															onclick={() => removeMetadataField(index)}
+															class="inline-flex items-center rounded-md text-sm font-medium text-red-600 hover:text-red-500"
+														>
+															<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+																<path
+																	fill-rule="evenodd"
+																	d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z"
+																	clip-rule="evenodd"
+																/>
+															</svg>
+														</button>
+													{/if}
+												</div>
+											{/each}
+										</div>
+										<p class="mt-1 text-xs text-gray-500">
+											For JSON values like numbers or booleans, use valid JSON syntax (e.g., true,
+											42, "string")
+										</p>
+									</div>
+
+									<div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+										<button
+											type="submit"
+											class="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:ml-3 sm:w-auto"
+										>
+											Create Product
+										</button>
+										<button
+											type="button"
+											onclick={closeAddModal}
+											class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+										>
+											Cancel
+										</button>
+									</div>
+								</form>
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Delete Product Confirmation Modal -->
+{#if showDeleteModal && productToDelete}
+	<div class="fixed inset-0 z-10 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+	<div class="fixed inset-0 z-10 overflow-y-auto">
+		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+			<div
+				class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6"
+			>
+				<div class="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
+					<button
+						type="button"
+						onclick={closeDeleteModal}
+						class="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+					>
+						<span class="sr-only">Close</span>
+						<svg
+							class="h-6 w-6"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							aria-hidden="true"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+
+				<div class="sm:flex sm:items-start">
+					<div
+						class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10"
+					>
+						<svg
+							class="h-6 w-6 text-red-600"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							aria-hidden="true"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+							/>
+						</svg>
+					</div>
+					<div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
+						<h3 class="text-base font-semibold leading-6 text-gray-900">Delete Product</h3>
+
+						{#if form?.deleteSuccess && form?.deletedProductId === productToDelete.id}
+							<div class="mt-2 rounded-md bg-green-50 p-4">
+								<div class="flex">
+									<div class="flex-shrink-0">
+										<svg
+											class="h-5 w-5 text-green-400"
+											viewBox="0 0 20 20"
+											fill="currentColor"
+											aria-hidden="true"
+										>
+											<path
+												fill-rule="evenodd"
+												d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.565a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
+												clip-rule="evenodd"
+											/>
+										</svg>
+									</div>
+									<div class="ml-3">
+										<p class="text-sm font-medium text-green-800">Product deleted successfully!</p>
+									</div>
+								</div>
+							</div>
+						{:else}
+							<div class="mt-2">
+								{#if form?.deleteError && form?.deletedProductId === productToDelete.id}
+									<div class="mb-4 rounded-md bg-red-50 p-2 text-sm text-red-700">
+										{form.deleteError}
+									</div>
+								{/if}
+
+								<p class="text-sm text-gray-500">
+									Are you sure you want to delete <span class="font-semibold"
+										>{productToDelete.name}</span
+									>? This action cannot be undone.
+								</p>
+
+								<form method="POST" action="?/deleteProduct" use:enhance>
+									<input type="hidden" name="productId" value={productToDelete.id} />
+
+									<div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+										<button
+											type="submit"
+											class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto"
+										>
+											Delete
+										</button>
+										<button
+											type="button"
+											onclick={closeDeleteModal}
+											class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+										>
+											Cancel
+										</button>
+									</div>
+								</form>
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
 {/if}

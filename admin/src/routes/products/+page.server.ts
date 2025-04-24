@@ -155,5 +155,48 @@ export const actions: Actions = {
         values: { name, description, isActive }
       });
     }
+  },
+  deleteProduct: async ({ request, fetch }) => {
+    const formData = await request.formData();
+    const productId = formData.get('productId')?.toString();
+    
+    if (!productId) {
+      return fail(400, { deleteError: 'Product ID is required' });
+    }
+    
+    try {
+      // Send DELETE request to the API
+      const response = await fetch(`http://localhost:8080/api/products/${productId}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        // Handle different error cases
+        if (response.status === 404) {
+          return fail(404, { 
+            deleteError: 'Product not found',
+            deletedProductId: productId
+          });
+        }
+        
+        return fail(response.status, { 
+          deleteError: `Error: ${response.statusText}`,
+          deletedProductId: productId
+        });
+      }
+      
+      // On success, return to the products page
+      return { 
+        deleteSuccess: true,
+        deletedProductId: productId
+      };
+      
+    } catch (error) {
+      console.error('Failed to delete product:', error);
+      return fail(500, { 
+        deleteError: 'Network error. Please try again.',
+        deletedProductId: productId
+      });
+    }
   }
 };
