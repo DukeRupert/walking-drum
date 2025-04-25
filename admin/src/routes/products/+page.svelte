@@ -84,9 +84,9 @@
 		window.location.href = url.toString();
 	}
 
-	const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
-	const hasNextPage = products.length >= pagination.limit;
-	const hasPrevPage = pagination.offset > 0;
+    let currentPage = $derived(Math.floor(pagination.offset / pagination.limit) + 1);
+    let hasNextPage = $derived(products.length >= pagination.limit);
+    let hasPrevPage = $derived(pagination.offset > 0);
 
 	// Close modal on escape key
 	onMount(() => {

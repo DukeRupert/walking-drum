@@ -1,10 +1,10 @@
-<!-- src/routes/admin/prices/+page.svelte -->
+<!-- src/routes/invoices/+page.svelte -->
 <script lang="ts">
     import type { PageProps } from './$types';
     
     let { data }: PageProps = $props();
     
-    let { prices, pagination, error } = $derived(data);
+    let { invoices, pagination, statusList, error } = $derived(data);
     
     // Format amount as currency
     function formatAmount(amount: number, currency: string): string {
@@ -18,34 +18,49 @@
     }
     
     // Format date
-    function formatDate(dateString: string): string {
+    function formatDate(dateString?: string): string {
+      if (!dateString) return '—';
       return new Date(dateString).toLocaleString();
     }
     
-    // Format billing interval
-    function formatInterval(type: string, count: number): string {
-      if (type === 'one_time') return 'One-time payment';
-      
-      const typeDisplay = type === 'day' ? 'day' :
-                           type === 'week' ? 'week' :
-                           type === 'month' ? 'month' :
-                           type === 'year' ? 'year' : type;
-      
-      return `Every ${count === 1 ? 'one' : count} ${typeDisplay}${count === 1 ? '' : 's'}`;
+    // Get status badge classes
+    function getStatusClasses(status: string): string {
+      switch (status.toLowerCase()) {
+        case 'paid':
+          return 'bg-green-50 text-green-700';
+        case 'open':
+          return 'bg-blue-50 text-blue-700';
+        case 'draft':
+          return 'bg-gray-50 text-gray-700';
+        case 'uncollectible':
+          return 'bg-red-50 text-red-700';
+        case 'void':
+          return 'bg-purple-50 text-purple-700';
+        default:
+          return 'bg-gray-50 text-gray-700';
+      }
     }
     
-    // Toggle active filter
-    function toggleActiveFilter() {
+    // Apply status filter
+    function applyStatusFilter(event: Event) {
+      const select = event.target as HTMLSelectElement;
+      const status = select.value;
+      
       const url = new URL(window.location.href);
-      url.searchParams.set('active', (!pagination.activeOnly).toString());
+      if (status) {
+        url.searchParams.set('status', status);
+      } else {
+        url.searchParams.delete('status');
+      }
+      
       url.searchParams.set('offset', '0'); // Reset to first page
       window.location.href = url.toString();
     }
     
-    // Toggle include product
-    function toggleIncludeProduct() {
+    // Toggle include relations
+    function toggleIncludeRelations() {
       const url = new URL(window.location.href);
-      url.searchParams.set('include_product', (!pagination.includeProduct).toString());
+      url.searchParams.set('include_relations', (!pagination.includeRelations).toString());
       window.location.href = url.toString();
     }
     
@@ -60,17 +75,17 @@
       window.location.href = url.toString();
     }
     
-    let currentPage = $derived(Math.floor(pagination.offset / pagination.limit) + 1);
-    let hasNextPage = $derived(prices.length >= pagination.limit);
-    let hasPrevPage = $derived(pagination.offset > 0);
+    const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+    const hasNextPage = false
+    const hasPrevPage = pagination.offset > 0;
   </script>
   
   <div class="px-4 sm:px-6 lg:px-8">
     <div class="sm:flex sm:items-center">
       <div class="sm:flex-auto">
-        <h1 class="text-base font-semibold text-gray-900">Prices</h1>
+        <h1 class="text-base font-semibold text-gray-900">Invoices</h1>
         <p class="mt-2 text-sm text-gray-700">
-          A list of all your pricing configurations including amounts, billing intervals, and associated products.
+          A list of all invoices including their status, amount, and related information.
         </p>
         
         {#if error}
@@ -81,31 +96,43 @@
       </div>
       <div class="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
         <a
-          href="/prices/new"
+          href="/invoices/new"
           class="block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
         >
-          Add price
+          Create invoice
         </a>
       </div>
     </div>
     
     <div class="mt-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-      <label class="flex items-center text-sm text-gray-700">
-        <input type="checkbox" 
-          checked={pagination.activeOnly} 
-          onchange={toggleActiveFilter}
-          class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-        />
-        <span class="ml-2">Show active prices only</span>
-      </label>
+      <!-- Status filter -->
+      <div>
+        <label for="status-filter" class="sr-only">Filter by status</label>
+        <select
+          id="status-filter"
+          onchange={applyStatusFilter}
+          class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3"
+        >
+          <option value="">All statuses</option>
+          {#each statusList as status}
+            <option 
+              value={status.value} 
+              selected={pagination.status === status.value}
+            >
+              {status.label}
+            </option>
+          {/each}
+        </select>
+      </div>
       
+      <!-- Include relations checkbox -->
       <label class="flex items-center text-sm text-gray-700">
         <input type="checkbox" 
-          checked={pagination.includeProduct} 
-          onchange={toggleIncludeProduct}
+          checked={pagination.includeRelations} 
+          onchange={toggleIncludeRelations}
           class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
         />
-        <span class="ml-2">Include product details</span>
+        <span class="ml-2">Include user and subscription details</span>
       </label>
     </div>
     
@@ -115,80 +142,91 @@
           <table class="min-w-full divide-y divide-gray-300">
             <thead>
               <tr>
-                <th scope="col" class="py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-gray-900 sm:pl-0">Price</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Billing</th>
-                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Product</th>
+                <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">Invoice</th>
                 <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Amount</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">User</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Period</th>
                 <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Created</th>
-                <th scope="col" class="relative py-3.5 pr-4 pl-3 sm:pr-0">
+                <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-0">
                   <span class="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              {#if prices.length === 0}
+              {#if invoices.length === 0}
                 <tr>
-                  <td colspan="6" class="py-4 text-center text-sm text-gray-500">
-                    No prices found.
+                  <td colspan="7" class="py-4 text-center text-sm text-gray-500">
+                    No invoices found.
                   </td>
                 </tr>
               {/if}
               
-              {#each prices as price}
+              {#each invoices as invoice}
                 <tr>
-                  <td class="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-gray-900 sm:pl-0">
+                  <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-0">
                     <div>
-                      {formatAmount(price.amount, price.currency)}
-                      {#if price.nickname}
-                        <span class="ml-1 text-gray-500">({price.nickname})</span>
-                      {/if}
+                      {invoice.stripe_invoice_id}
                     </div>
-                    <div class="text-xs text-gray-500 font-normal">
-                      ID: {price.id}
+                    <div class="text-xs text-gray-500">
+                      ID: {invoice.id}
                     </div>
                   </td>
-                  <td class="px-3 py-4 text-sm text-gray-500">
-                    {formatInterval(price.interval_type, price.interval_count)}
-                    {#if price.trial_period_days}
-                      <div class="text-xs">
-                        {price.trial_period_days} day trial
+                  <td class="whitespace-nowrap px-3 py-4 text-sm">
+                    <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium {getStatusClasses(invoice.status)}">
+                      {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                    </span>
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
+                    <div>
+                      {formatAmount(invoice.amount_due, invoice.currency)}
+                    </div>
+                    {#if invoice.amount_paid > 0 && invoice.amount_paid !== invoice.amount_due}
+                      <div class="text-xs text-gray-500">
+                        Paid: {formatAmount(invoice.amount_paid, invoice.currency)}
                       </div>
                     {/if}
                   </td>
-                  <td class="px-3 py-4 text-sm text-gray-500">
-                    {#if pagination.includeProduct && price.product}
-                      <div class="font-medium">{price.product.name}</div>
-                      <div class="text-xs truncate max-w-xs">{price.product.description}</div>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    {#if pagination.includeRelations && invoice.user}
+                      <div class="font-medium text-gray-900">{invoice.user.name || invoice.user.email}</div>
+                      {#if invoice.user.name}
+                        <div class="text-xs">{invoice.user.email}</div>
+                      {/if}
                     {:else}
                       <a 
-                        href={`/products/${price.product_id}`}
+                        href={`/users/${invoice.user_id}`}
                         class="text-indigo-600 hover:text-indigo-900"
                       >
-                        {price.product_id}
+                        {invoice.user_id}
                       </a>
                     {/if}
                   </td>
-                  <td class="px-3 py-4 text-sm whitespace-nowrap">
-                    {#if price.is_active}
-                      <span class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
-                        Active
-                      </span>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    {#if invoice.period_start && invoice.period_end}
+                      <div>
+                        {formatDate(invoice.period_start).split(',')[0]}
+                      </div>
+                      <div>
+                        to {formatDate(invoice.period_end).split(',')[0]}
+                      </div>
                     {:else}
-                      <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600">
-                        Inactive
-                      </span>
+                      <span class="text-gray-400">—</span>
                     {/if}
                   </td>
-                  <td class="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
-                    {formatDate(price.created_at)}
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    {formatDate(invoice.created_at)}
                   </td>
-                  <td class="relative py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
-                    <a href={`/prices/${price.id}`} class="text-indigo-600 hover:text-indigo-900 mr-4">
-                      Edit<span class="sr-only">, {price.id}</span>
+                  <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
+                    <a href={`/invoices/${invoice.id}`} class="text-indigo-600 hover:text-indigo-900 mr-4">
+                      View<span class="sr-only">, {invoice.id}</span>
                     </a>
-                    <button class="text-red-600 hover:text-red-900">
-                      Delete<span class="sr-only">, {price.id}</span>
-                    </button>
+                    
+                    {#if invoice.invoice_pdf}
+                      <a href={invoice.invoice_pdf} target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-900">
+                        PDF<span class="sr-only">, {invoice.id}</span>
+                      </a>
+                    {/if}
                   </td>
                 </tr>
               {/each}
@@ -219,7 +257,7 @@
       <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
         <div>
           <p class="text-sm text-gray-700">
-            Showing <span class="font-medium">{pagination.offset + 1}</span> to <span class="font-medium">{pagination.offset + prices.length}</span> results
+            Showing <span class="font-medium">{pagination.offset + 1}</span> to <span class="font-medium">{pagination.offset + invoices.length}</span> results
           </p>
         </div>
         <div>

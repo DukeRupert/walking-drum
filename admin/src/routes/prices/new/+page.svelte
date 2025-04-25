@@ -135,7 +135,7 @@
                 />
               </div>
               <p class="mt-1 text-xs text-gray-500">
-                Displayed as {formatAmountDisplay(selectedAmount || 0, selectedCurrency || 'usd')}
+                Displayed as {formatAmountDisplay(Number(selectedAmount) || 0, selectedCurrency.toString() || 'usd')}
               </p>
             </div>
             
