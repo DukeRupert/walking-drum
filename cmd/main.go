@@ -189,6 +189,7 @@ func main() {
 
 	// Register subscription routes
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
+	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.ListSubscriptions).Methods("GET")
 	apiRouter.HandleFunc("/subscriptions/{id}", subscriptionHandler.GetSubscription).Methods("GET")
 	apiRouter.HandleFunc("/subscriptions/user/{userID}", subscriptionHandler.GetUserSubscriptions).Methods("GET")
 	apiRouter.HandleFunc("/subscriptions/customer/{customerID}", subscriptionHandler.GetCustomerSubscriptions).Methods("GET")

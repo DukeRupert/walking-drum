@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-	
+
 	"github.com/dukerupert/walking-drum/models"
 )
 
@@ -24,8 +24,9 @@ type SubscriptionRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Subscription, error)
 	GetByStripeSubscriptionID(ctx context.Context, stripeSubscriptionID string) (*models.Subscription, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]*models.Subscription, error)
+    ListByUserIDAndStatus(ctx context.Context, userID uuid.UUID, status models.SubscriptionStatus, limit, offset int) ([]*models.Subscription, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID, status string, limit, offset int) ([]*models.Subscription, error)
-    GetByCustomerID(ctx context.Context, customerID string, status string, limit, offset int) ([]*models.Subscription, error)
+	GetByCustomerID(ctx context.Context, customerID string, status string, limit, offset int) ([]*models.Subscription, error)
 	Update(ctx context.Context, subscription *models.Subscription) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, limit, offset int) ([]*models.Subscription, error)
@@ -43,17 +44,17 @@ func NewSubscriptionRepository(db *sql.DB) SubscriptionRepository {
 }
 
 func (r *PostgresSubscriptionRepository) Create(ctx context.Context, subscription *models.Subscription) error {
-    // Generate a new UUID if not provided
-    if subscription.ID == uuid.Nil {
-        subscription.ID = uuid.New()
-    }
+	// Generate a new UUID if not provided
+	if subscription.ID == uuid.Nil {
+		subscription.ID = uuid.New()
+	}
 
-    // Set timestamps
-    now := time.Now()
-    subscription.CreatedAt = now
-    subscription.UpdatedAt = now
+	// Set timestamps
+	now := time.Now()
+	subscription.CreatedAt = now
+	subscription.UpdatedAt = now
 
-    query := `
+	query := `
         INSERT INTO subscriptions (
             id, user_id, price_id, quantity, status, 
             current_period_start, current_period_end, cancel_at, 
@@ -69,80 +70,80 @@ func (r *PostgresSubscriptionRepository) Create(ctx context.Context, subscriptio
         RETURNING id
     `
 
-    var cancelAt sql.NullTime
-    if subscription.CancelAt != nil {
-        cancelAt.Time = *subscription.CancelAt
-        cancelAt.Valid = true
-    }
+	var cancelAt sql.NullTime
+	if subscription.CancelAt != nil {
+		cancelAt.Time = *subscription.CancelAt
+		cancelAt.Valid = true
+	}
 
-    var canceledAt sql.NullTime
-    if subscription.CanceledAt != nil {
-        canceledAt.Time = *subscription.CanceledAt
-        canceledAt.Valid = true
-    }
+	var canceledAt sql.NullTime
+	if subscription.CanceledAt != nil {
+		canceledAt.Time = *subscription.CanceledAt
+		canceledAt.Valid = true
+	}
 
-    var endedAt sql.NullTime
-    if subscription.EndedAt != nil {
-        endedAt.Time = *subscription.EndedAt
-        endedAt.Valid = true
-    }
+	var endedAt sql.NullTime
+	if subscription.EndedAt != nil {
+		endedAt.Time = *subscription.EndedAt
+		endedAt.Valid = true
+	}
 
-    var trialStart sql.NullTime
-    if subscription.TrialStart != nil {
-        trialStart.Time = *subscription.TrialStart
-        trialStart.Valid = true
-    }
+	var trialStart sql.NullTime
+	if subscription.TrialStart != nil {
+		trialStart.Time = *subscription.TrialStart
+		trialStart.Valid = true
+	}
 
-    var trialEnd sql.NullTime
-    if subscription.TrialEnd != nil {
-        trialEnd.Time = *subscription.TrialEnd
-        trialEnd.Valid = true
-    }
+	var trialEnd sql.NullTime
+	if subscription.TrialEnd != nil {
+		trialEnd.Time = *subscription.TrialEnd
+		trialEnd.Valid = true
+	}
 
-    var resumeAt sql.NullTime
-    if subscription.ResumeAt != nil {
-        resumeAt.Time = *subscription.ResumeAt
-        resumeAt.Valid = true
-    }
+	var resumeAt sql.NullTime
+	if subscription.ResumeAt != nil {
+		resumeAt.Time = *subscription.ResumeAt
+		resumeAt.Valid = true
+	}
 
-    err := r.db.QueryRowContext(
-        ctx,
-        query,
-        subscription.ID,
-        subscription.UserID,
-        subscription.PriceID,
-        subscription.Quantity,
-        subscription.Status,
-        subscription.CurrentPeriodStart,
-        subscription.CurrentPeriodEnd,
-        cancelAt,
-        canceledAt,
-        endedAt,
-        trialStart,
-        trialEnd,
-        subscription.CreatedAt,
-        subscription.UpdatedAt,
-        subscription.StripeSubscriptionID,
-        subscription.StripeCustomerID,
-        subscription.CollectionMethod,
-        subscription.CancelAtPeriodEnd,
-        subscription.Metadata,
-        resumeAt,
-    ).Scan(&subscription.ID)
+	err := r.db.QueryRowContext(
+		ctx,
+		query,
+		subscription.ID,
+		subscription.UserID,
+		subscription.PriceID,
+		subscription.Quantity,
+		subscription.Status,
+		subscription.CurrentPeriodStart,
+		subscription.CurrentPeriodEnd,
+		cancelAt,
+		canceledAt,
+		endedAt,
+		trialStart,
+		trialEnd,
+		subscription.CreatedAt,
+		subscription.UpdatedAt,
+		subscription.StripeSubscriptionID,
+		subscription.StripeCustomerID,
+		subscription.CollectionMethod,
+		subscription.CancelAtPeriodEnd,
+		subscription.Metadata,
+		resumeAt,
+	).Scan(&subscription.ID)
 
-    if err != nil {
-        // Check for unique violation
-        if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
-            return ErrSubscriptionExists
-        }
-        return fmt.Errorf("error creating subscription: %w", err)
-    }
+	if err != nil {
+		// Check for unique violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			return ErrSubscriptionExists
+		}
+		return fmt.Errorf("error creating subscription: %w", err)
+	}
 
-    return nil
+	return nil
 }
 
 func (r *PostgresSubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Subscription, error) {
-    query := `
+	query := `
         SELECT 
             id, user_id, price_id, quantity, status, 
             current_period_start, current_period_end, cancel_at, 
@@ -154,77 +155,77 @@ func (r *PostgresSubscriptionRepository) GetByID(ctx context.Context, id uuid.UU
         WHERE id = $1
     `
 
-    var subscription models.Subscription
-    var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
-    var metadata sql.NullString
+	var subscription models.Subscription
+	var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
+	var metadata sql.NullString
 
-    err := r.db.QueryRowContext(ctx, query, id).Scan(
-        &subscription.ID,
-        &subscription.UserID,
-        &subscription.PriceID,
-        &subscription.Quantity,
-        &subscription.Status,
-        &subscription.CurrentPeriodStart,
-        &subscription.CurrentPeriodEnd,
-        &cancelAt,
-        &canceledAt,
-        &endedAt,
-        &trialStart,
-        &trialEnd,
-        &subscription.CreatedAt,
-        &subscription.UpdatedAt,
-        &subscription.StripeSubscriptionID,
-        &subscription.StripeCustomerID,
-        &subscription.CollectionMethod,
-        &subscription.CancelAtPeriodEnd,
-        &metadata,
-        &resumeAt,
-    )
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&subscription.ID,
+		&subscription.UserID,
+		&subscription.PriceID,
+		&subscription.Quantity,
+		&subscription.Status,
+		&subscription.CurrentPeriodStart,
+		&subscription.CurrentPeriodEnd,
+		&cancelAt,
+		&canceledAt,
+		&endedAt,
+		&trialStart,
+		&trialEnd,
+		&subscription.CreatedAt,
+		&subscription.UpdatedAt,
+		&subscription.StripeSubscriptionID,
+		&subscription.StripeCustomerID,
+		&subscription.CollectionMethod,
+		&subscription.CancelAtPeriodEnd,
+		&metadata,
+		&resumeAt,
+	)
 
-    if err != nil {
-        if err == sql.ErrNoRows {
-            return nil, ErrSubscriptionNotFound
-        }
-        return nil, fmt.Errorf("error getting subscription by ID: %w", err)
-    }
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSubscriptionNotFound
+		}
+		return nil, fmt.Errorf("error getting subscription by ID: %w", err)
+	}
 
-    if cancelAt.Valid {
-        t := cancelAt.Time
-        subscription.CancelAt = &t
-    }
+	if cancelAt.Valid {
+		t := cancelAt.Time
+		subscription.CancelAt = &t
+	}
 
-    if canceledAt.Valid {
-        t := canceledAt.Time
-        subscription.CanceledAt = &t
-    }
+	if canceledAt.Valid {
+		t := canceledAt.Time
+		subscription.CanceledAt = &t
+	}
 
-    if endedAt.Valid {
-        t := endedAt.Time
-        subscription.EndedAt = &t
-    }
+	if endedAt.Valid {
+		t := endedAt.Time
+		subscription.EndedAt = &t
+	}
 
-    if trialStart.Valid {
-        t := trialStart.Time
-        subscription.TrialStart = &t
-    }
+	if trialStart.Valid {
+		t := trialStart.Time
+		subscription.TrialStart = &t
+	}
 
-    if trialEnd.Valid {
-        t := trialEnd.Time
-        subscription.TrialEnd = &t
-    }
+	if trialEnd.Valid {
+		t := trialEnd.Time
+		subscription.TrialEnd = &t
+	}
 
-    if resumeAt.Valid {
-        t := resumeAt.Time
-        subscription.ResumeAt = &t
-    }
+	if resumeAt.Valid {
+		t := resumeAt.Time
+		subscription.ResumeAt = &t
+	}
 
-    // Handle JSON metadata conversion if needed
+	// Handle JSON metadata conversion if needed
 
-    return &subscription, nil
+	return &subscription, nil
 }
 
 func (r *PostgresSubscriptionRepository) GetByStripeSubscriptionID(ctx context.Context, stripeSubscriptionID string) (*models.Subscription, error) {
-    query := `
+	query := `
         SELECT 
             id, user_id, price_id, quantity, status, 
             current_period_start, current_period_end, cancel_at, 
@@ -236,77 +237,77 @@ func (r *PostgresSubscriptionRepository) GetByStripeSubscriptionID(ctx context.C
         WHERE stripe_subscription_id = $1
     `
 
-    var subscription models.Subscription
-    var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
-    var metadata sql.NullString
+	var subscription models.Subscription
+	var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
+	var metadata sql.NullString
 
-    err := r.db.QueryRowContext(ctx, query, stripeSubscriptionID).Scan(
-        &subscription.ID,
-        &subscription.UserID,
-        &subscription.PriceID,
-        &subscription.Quantity,
-        &subscription.Status,
-        &subscription.CurrentPeriodStart,
-        &subscription.CurrentPeriodEnd,
-        &cancelAt,
-        &canceledAt,
-        &endedAt,
-        &trialStart,
-        &trialEnd,
-        &subscription.CreatedAt,
-        &subscription.UpdatedAt,
-        &subscription.StripeSubscriptionID,
-        &subscription.StripeCustomerID,
-        &subscription.CollectionMethod,
-        &subscription.CancelAtPeriodEnd,
-        &metadata,
-        &resumeAt,
-    )
+	err := r.db.QueryRowContext(ctx, query, stripeSubscriptionID).Scan(
+		&subscription.ID,
+		&subscription.UserID,
+		&subscription.PriceID,
+		&subscription.Quantity,
+		&subscription.Status,
+		&subscription.CurrentPeriodStart,
+		&subscription.CurrentPeriodEnd,
+		&cancelAt,
+		&canceledAt,
+		&endedAt,
+		&trialStart,
+		&trialEnd,
+		&subscription.CreatedAt,
+		&subscription.UpdatedAt,
+		&subscription.StripeSubscriptionID,
+		&subscription.StripeCustomerID,
+		&subscription.CollectionMethod,
+		&subscription.CancelAtPeriodEnd,
+		&metadata,
+		&resumeAt,
+	)
 
-    if err != nil {
-        if err == sql.ErrNoRows {
-            return nil, ErrSubscriptionNotFound
-        }
-        return nil, fmt.Errorf("error getting subscription by Stripe subscription ID: %w", err)
-    }
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrSubscriptionNotFound
+		}
+		return nil, fmt.Errorf("error getting subscription by Stripe subscription ID: %w", err)
+	}
 
-    if cancelAt.Valid {
-        t := cancelAt.Time
-        subscription.CancelAt = &t
-    }
+	if cancelAt.Valid {
+		t := cancelAt.Time
+		subscription.CancelAt = &t
+	}
 
-    if canceledAt.Valid {
-        t := canceledAt.Time
-        subscription.CanceledAt = &t
-    }
+	if canceledAt.Valid {
+		t := canceledAt.Time
+		subscription.CanceledAt = &t
+	}
 
-    if endedAt.Valid {
-        t := endedAt.Time
-        subscription.EndedAt = &t
-    }
+	if endedAt.Valid {
+		t := endedAt.Time
+		subscription.EndedAt = &t
+	}
 
-    if trialStart.Valid {
-        t := trialStart.Time
-        subscription.TrialStart = &t
-    }
+	if trialStart.Valid {
+		t := trialStart.Time
+		subscription.TrialStart = &t
+	}
 
-    if trialEnd.Valid {
-        t := trialEnd.Time
-        subscription.TrialEnd = &t
-    }
+	if trialEnd.Valid {
+		t := trialEnd.Time
+		subscription.TrialEnd = &t
+	}
 
-    if resumeAt.Valid {
-        t := resumeAt.Time
-        subscription.ResumeAt = &t
-    }
+	if resumeAt.Valid {
+		t := resumeAt.Time
+		subscription.ResumeAt = &t
+	}
 
-    // Handle JSON metadata conversion if needed
+	// Handle JSON metadata conversion if needed
 
-    return &subscription, nil
+	return &subscription, nil
 }
 
 func (r *PostgresSubscriptionRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*models.Subscription, error) {
-    query := `
+	query := `
         SELECT 
             id, user_id, price_id, quantity, status, 
             current_period_start, current_period_end, cancel_at, 
@@ -319,99 +320,200 @@ func (r *PostgresSubscriptionRepository) ListByUserID(ctx context.Context, userI
         ORDER BY created_at DESC
     `
 
-    rows, err := r.db.QueryContext(ctx, query, userID)
-    if err != nil {
-        return nil, fmt.Errorf("error listing subscriptions by user ID: %w", err)
-    }
-    defer rows.Close()
+	rows, err := r.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error listing subscriptions by user ID: %w", err)
+	}
+	defer rows.Close()
 
-    var subscriptions []*models.Subscription
+	var subscriptions []*models.Subscription
 
-    for rows.Next() {
-        var subscription models.Subscription
-        var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
-        var metadata sql.NullString
+	for rows.Next() {
+		var subscription models.Subscription
+		var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
+		var metadata sql.NullString
 
-        err := rows.Scan(
-            &subscription.ID,
-            &subscription.UserID,
-            &subscription.PriceID,
-            &subscription.Quantity,
-            &subscription.Status,
-            &subscription.CurrentPeriodStart,
-            &subscription.CurrentPeriodEnd,
-            &cancelAt,
-            &canceledAt,
-            &endedAt,
-            &trialStart,
-            &trialEnd,
-            &subscription.CreatedAt,
-            &subscription.UpdatedAt,
-            &subscription.StripeSubscriptionID,
-            &subscription.StripeCustomerID,
-            &subscription.CollectionMethod,
-            &subscription.CancelAtPeriodEnd,
-            &metadata,
-            &resumeAt,
-        )
+		err := rows.Scan(
+			&subscription.ID,
+			&subscription.UserID,
+			&subscription.PriceID,
+			&subscription.Quantity,
+			&subscription.Status,
+			&subscription.CurrentPeriodStart,
+			&subscription.CurrentPeriodEnd,
+			&cancelAt,
+			&canceledAt,
+			&endedAt,
+			&trialStart,
+			&trialEnd,
+			&subscription.CreatedAt,
+			&subscription.UpdatedAt,
+			&subscription.StripeSubscriptionID,
+			&subscription.StripeCustomerID,
+			&subscription.CollectionMethod,
+			&subscription.CancelAtPeriodEnd,
+			&metadata,
+			&resumeAt,
+		)
 
-        if err != nil {
-            return nil, fmt.Errorf("error scanning subscription row: %w", err)
-        }
+		if err != nil {
+			return nil, fmt.Errorf("error scanning subscription row: %w", err)
+		}
 
-        if cancelAt.Valid {
-            t := cancelAt.Time
-            subscription.CancelAt = &t
-        }
+		if cancelAt.Valid {
+			t := cancelAt.Time
+			subscription.CancelAt = &t
+		}
 
-        if canceledAt.Valid {
-            t := canceledAt.Time
-            subscription.CanceledAt = &t
-        }
+		if canceledAt.Valid {
+			t := canceledAt.Time
+			subscription.CanceledAt = &t
+		}
 
-        if endedAt.Valid {
-            t := endedAt.Time
-            subscription.EndedAt = &t
-        }
+		if endedAt.Valid {
+			t := endedAt.Time
+			subscription.EndedAt = &t
+		}
 
-        if trialStart.Valid {
-            t := trialStart.Time
-            subscription.TrialStart = &t
-        }
+		if trialStart.Valid {
+			t := trialStart.Time
+			subscription.TrialStart = &t
+		}
 
-        if trialEnd.Valid {
-            t := trialEnd.Time
-            subscription.TrialEnd = &t
-        }
+		if trialEnd.Valid {
+			t := trialEnd.Time
+			subscription.TrialEnd = &t
+		}
 
-        if resumeAt.Valid {
-            t := resumeAt.Time
-            subscription.ResumeAt = &t
-        }
+		if resumeAt.Valid {
+			t := resumeAt.Time
+			subscription.ResumeAt = &t
+		}
 
-        // Handle JSON metadata conversion if needed
+		// Handle JSON metadata conversion if needed
 
-        subscriptions = append(subscriptions, &subscription)
-    }
+		subscriptions = append(subscriptions, &subscription)
+	}
 
-    if err = rows.Err(); err != nil {
-        return nil, fmt.Errorf("error iterating subscription rows: %w", err)
-    }
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating subscription rows: %w", err)
+	}
 
-    return subscriptions, nil
+	return subscriptions, nil
+}
+
+// ListByUserIDAndStatus lists subscriptions for a specific user with a specific status
+func (r *PostgresSubscriptionRepository) ListByUserIDAndStatus(ctx context.Context, userID uuid.UUID, status models.SubscriptionStatus, limit, offset int) ([]*models.Subscription, error) {
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+
+	query := `
+        SELECT 
+            id, user_id, price_id, quantity, status, 
+            current_period_start, current_period_end, cancel_at, 
+            canceled_at, ended_at, trial_start, trial_end, 
+            created_at, updated_at, stripe_subscription_id, 
+            stripe_customer_id, collection_method, 
+            cancel_at_period_end, metadata, resume_at
+        FROM subscriptions
+        WHERE user_id = $1 AND status = $2
+        ORDER BY created_at DESC
+        LIMIT $3 OFFSET $4
+    `
+
+	rows, err := r.db.QueryContext(ctx, query, userID, status, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("error listing subscriptions by user ID and status: %w", err)
+	}
+	defer rows.Close()
+	var subscriptions []*models.Subscription
+
+	for rows.Next() {
+		var subscription models.Subscription
+		var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
+		var metadata sql.NullString
+
+		err := rows.Scan(
+			&subscription.ID,
+			&subscription.UserID,
+			&subscription.PriceID,
+			&subscription.Quantity,
+			&subscription.Status,
+			&subscription.CurrentPeriodStart,
+			&subscription.CurrentPeriodEnd,
+			&cancelAt,
+			&canceledAt,
+			&endedAt,
+			&trialStart,
+			&trialEnd,
+			&subscription.CreatedAt,
+			&subscription.UpdatedAt,
+			&subscription.StripeSubscriptionID,
+			&subscription.StripeCustomerID,
+			&subscription.CollectionMethod,
+			&subscription.CancelAtPeriodEnd,
+			&metadata,
+			&resumeAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("error scanning subscription row: %w", err)
+		}
+
+		if cancelAt.Valid {
+			t := cancelAt.Time
+			subscription.CancelAt = &t
+		}
+
+		if canceledAt.Valid {
+			t := canceledAt.Time
+			subscription.CanceledAt = &t
+		}
+
+		if endedAt.Valid {
+			t := endedAt.Time
+			subscription.EndedAt = &t
+		}
+
+		if trialStart.Valid {
+			t := trialStart.Time
+			subscription.TrialStart = &t
+		}
+
+		if trialEnd.Valid {
+			t := trialEnd.Time
+			subscription.TrialEnd = &t
+		}
+
+		if resumeAt.Valid {
+			t := resumeAt.Time
+			subscription.ResumeAt = &t
+		}
+
+		// Handle JSON metadata conversion if needed
+
+		subscriptions = append(subscriptions, &subscription)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating subscription rows: %w", err)
+	}
+
+	return subscriptions, nil
 }
 
 func (r *PostgresSubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UUID, status string, limit, offset int) ([]*models.Subscription, error) {
-    if limit <= 0 {
-        limit = 10 // Default limit
-    }
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
 
-    var query string
-    var args []interface{}
+	var query string
+	var args []interface{}
 
-    if status != "" {
-        // Query with status filter
-        query = `
+	if status != "" {
+		// Query with status filter
+		query = `
             SELECT 
                 id, user_id, price_id, quantity, status, 
                 current_period_start, current_period_end, cancel_at, 
@@ -424,10 +526,10 @@ func (r *PostgresSubscriptionRepository) GetByUserID(ctx context.Context, userID
             ORDER BY created_at DESC
             LIMIT $3 OFFSET $4
         `
-        args = []interface{}{userID, status, limit, offset}
-    } else {
-        // Query without status filter
-        query = `
+		args = []interface{}{userID, status, limit, offset}
+	} else {
+		// Query without status filter
+		query = `
             SELECT 
                 id, user_id, price_id, quantity, status, 
                 current_period_start, current_period_end, cancel_at, 
@@ -440,102 +542,102 @@ func (r *PostgresSubscriptionRepository) GetByUserID(ctx context.Context, userID
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
         `
-        args = []interface{}{userID, limit, offset}
-    }
+		args = []interface{}{userID, limit, offset}
+	}
 
-    rows, err := r.db.QueryContext(ctx, query, args...)
-    if err != nil {
-        return nil, fmt.Errorf("error listing subscriptions by user ID: %w", err)
-    }
-    defer rows.Close()
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("error listing subscriptions by user ID: %w", err)
+	}
+	defer rows.Close()
 
-    var subscriptions []*models.Subscription
+	var subscriptions []*models.Subscription
 
-    for rows.Next() {
-        var subscription models.Subscription
-        var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
-        var metadata sql.NullString
+	for rows.Next() {
+		var subscription models.Subscription
+		var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
+		var metadata sql.NullString
 
-        err := rows.Scan(
-            &subscription.ID,
-            &subscription.UserID,
-            &subscription.PriceID,
-            &subscription.Quantity,
-            &subscription.Status,
-            &subscription.CurrentPeriodStart,
-            &subscription.CurrentPeriodEnd,
-            &cancelAt,
-            &canceledAt,
-            &endedAt,
-            &trialStart,
-            &trialEnd,
-            &subscription.CreatedAt,
-            &subscription.UpdatedAt,
-            &subscription.StripeSubscriptionID,
-            &subscription.StripeCustomerID,
-            &subscription.CollectionMethod,
-            &subscription.CancelAtPeriodEnd,
-            &metadata,
-            &resumeAt,
-        )
+		err := rows.Scan(
+			&subscription.ID,
+			&subscription.UserID,
+			&subscription.PriceID,
+			&subscription.Quantity,
+			&subscription.Status,
+			&subscription.CurrentPeriodStart,
+			&subscription.CurrentPeriodEnd,
+			&cancelAt,
+			&canceledAt,
+			&endedAt,
+			&trialStart,
+			&trialEnd,
+			&subscription.CreatedAt,
+			&subscription.UpdatedAt,
+			&subscription.StripeSubscriptionID,
+			&subscription.StripeCustomerID,
+			&subscription.CollectionMethod,
+			&subscription.CancelAtPeriodEnd,
+			&metadata,
+			&resumeAt,
+		)
 
-        if err != nil {
-            return nil, fmt.Errorf("error scanning subscription row: %w", err)
-        }
+		if err != nil {
+			return nil, fmt.Errorf("error scanning subscription row: %w", err)
+		}
 
-        if cancelAt.Valid {
-            t := cancelAt.Time
-            subscription.CancelAt = &t
-        }
+		if cancelAt.Valid {
+			t := cancelAt.Time
+			subscription.CancelAt = &t
+		}
 
-        if canceledAt.Valid {
-            t := canceledAt.Time
-            subscription.CanceledAt = &t
-        }
+		if canceledAt.Valid {
+			t := canceledAt.Time
+			subscription.CanceledAt = &t
+		}
 
-        if endedAt.Valid {
-            t := endedAt.Time
-            subscription.EndedAt = &t
-        }
+		if endedAt.Valid {
+			t := endedAt.Time
+			subscription.EndedAt = &t
+		}
 
-        if trialStart.Valid {
-            t := trialStart.Time
-            subscription.TrialStart = &t
-        }
+		if trialStart.Valid {
+			t := trialStart.Time
+			subscription.TrialStart = &t
+		}
 
-        if trialEnd.Valid {
-            t := trialEnd.Time
-            subscription.TrialEnd = &t
-        }
+		if trialEnd.Valid {
+			t := trialEnd.Time
+			subscription.TrialEnd = &t
+		}
 
-        if resumeAt.Valid {
-            t := resumeAt.Time
-            subscription.ResumeAt = &t
-        }
+		if resumeAt.Valid {
+			t := resumeAt.Time
+			subscription.ResumeAt = &t
+		}
 
-        // Handle JSON metadata conversion if needed
+		// Handle JSON metadata conversion if needed
 
-        subscriptions = append(subscriptions, &subscription)
-    }
+		subscriptions = append(subscriptions, &subscription)
+	}
 
-    if err = rows.Err(); err != nil {
-        return nil, fmt.Errorf("error iterating subscription rows: %w", err)
-    }
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating subscription rows: %w", err)
+	}
 
-    return subscriptions, nil
+	return subscriptions, nil
 }
 
 func (r *PostgresSubscriptionRepository) GetByCustomerID(ctx context.Context, customerID string, status string, limit, offset int) ([]*models.Subscription, error) {
-    if limit <= 0 {
-        limit = 10 // Default limit
-    }
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
 
-    var query string
-    var args []interface{}
+	var query string
+	var args []interface{}
 
-    if status != "" {
-        // Query with status filter
-        query = `
+	if status != "" {
+		// Query with status filter
+		query = `
             SELECT 
                 id, user_id, price_id, quantity, status, 
                 current_period_start, current_period_end, cancel_at, 
@@ -548,10 +650,10 @@ func (r *PostgresSubscriptionRepository) GetByCustomerID(ctx context.Context, cu
             ORDER BY created_at DESC
             LIMIT $3 OFFSET $4
         `
-        args = []interface{}{customerID, status, limit, offset}
-    } else {
-        // Query without status filter
-        query = `
+		args = []interface{}{customerID, status, limit, offset}
+	} else {
+		// Query without status filter
+		query = `
             SELECT 
                 id, user_id, price_id, quantity, status, 
                 current_period_start, current_period_end, cancel_at, 
@@ -564,96 +666,96 @@ func (r *PostgresSubscriptionRepository) GetByCustomerID(ctx context.Context, cu
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
         `
-        args = []interface{}{customerID, limit, offset}
-    }
+		args = []interface{}{customerID, limit, offset}
+	}
 
-    rows, err := r.db.QueryContext(ctx, query, args...)
-    if err != nil {
-        return nil, fmt.Errorf("error listing subscriptions by customer ID: %w", err)
-    }
-    defer rows.Close()
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("error listing subscriptions by customer ID: %w", err)
+	}
+	defer rows.Close()
 
-    var subscriptions []*models.Subscription
+	var subscriptions []*models.Subscription
 
-    for rows.Next() {
-        var subscription models.Subscription
-        var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
-        var metadata sql.NullString
+	for rows.Next() {
+		var subscription models.Subscription
+		var cancelAt, canceledAt, endedAt, trialStart, trialEnd, resumeAt sql.NullTime
+		var metadata sql.NullString
 
-        err := rows.Scan(
-            &subscription.ID,
-            &subscription.UserID,
-            &subscription.PriceID,
-            &subscription.Quantity,
-            &subscription.Status,
-            &subscription.CurrentPeriodStart,
-            &subscription.CurrentPeriodEnd,
-            &cancelAt,
-            &canceledAt,
-            &endedAt,
-            &trialStart,
-            &trialEnd,
-            &subscription.CreatedAt,
-            &subscription.UpdatedAt,
-            &subscription.StripeSubscriptionID,
-            &subscription.StripeCustomerID,
-            &subscription.CollectionMethod,
-            &subscription.CancelAtPeriodEnd,
-            &metadata,
-            &resumeAt,
-        )
+		err := rows.Scan(
+			&subscription.ID,
+			&subscription.UserID,
+			&subscription.PriceID,
+			&subscription.Quantity,
+			&subscription.Status,
+			&subscription.CurrentPeriodStart,
+			&subscription.CurrentPeriodEnd,
+			&cancelAt,
+			&canceledAt,
+			&endedAt,
+			&trialStart,
+			&trialEnd,
+			&subscription.CreatedAt,
+			&subscription.UpdatedAt,
+			&subscription.StripeSubscriptionID,
+			&subscription.StripeCustomerID,
+			&subscription.CollectionMethod,
+			&subscription.CancelAtPeriodEnd,
+			&metadata,
+			&resumeAt,
+		)
 
-        if err != nil {
-            return nil, fmt.Errorf("error scanning subscription row: %w", err)
-        }
+		if err != nil {
+			return nil, fmt.Errorf("error scanning subscription row: %w", err)
+		}
 
-        if cancelAt.Valid {
-            t := cancelAt.Time
-            subscription.CancelAt = &t
-        }
+		if cancelAt.Valid {
+			t := cancelAt.Time
+			subscription.CancelAt = &t
+		}
 
-        if canceledAt.Valid {
-            t := canceledAt.Time
-            subscription.CanceledAt = &t
-        }
+		if canceledAt.Valid {
+			t := canceledAt.Time
+			subscription.CanceledAt = &t
+		}
 
-        if endedAt.Valid {
-            t := endedAt.Time
-            subscription.EndedAt = &t
-        }
+		if endedAt.Valid {
+			t := endedAt.Time
+			subscription.EndedAt = &t
+		}
 
-        if trialStart.Valid {
-            t := trialStart.Time
-            subscription.TrialStart = &t
-        }
+		if trialStart.Valid {
+			t := trialStart.Time
+			subscription.TrialStart = &t
+		}
 
-        if trialEnd.Valid {
-            t := trialEnd.Time
-            subscription.TrialEnd = &t
-        }
+		if trialEnd.Valid {
+			t := trialEnd.Time
+			subscription.TrialEnd = &t
+		}
 
-        if resumeAt.Valid {
-            t := resumeAt.Time
-            subscription.ResumeAt = &t
-        }
+		if resumeAt.Valid {
+			t := resumeAt.Time
+			subscription.ResumeAt = &t
+		}
 
-        // Handle JSON metadata conversion if needed
+		// Handle JSON metadata conversion if needed
 
-        subscriptions = append(subscriptions, &subscription)
-    }
+		subscriptions = append(subscriptions, &subscription)
+	}
 
-    if err = rows.Err(); err != nil {
-        return nil, fmt.Errorf("error iterating subscription rows: %w", err)
-    }
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating subscription rows: %w", err)
+	}
 
-    return subscriptions, nil
+	return subscriptions, nil
 }
 
 func (r *PostgresSubscriptionRepository) Update(ctx context.Context, subscription *models.Subscription) error {
-    // Update the timestamp
-    subscription.UpdatedAt = time.Now()
+	// Update the timestamp
+	subscription.UpdatedAt = time.Now()
 
-    query := `
+	query := `
         UPDATE subscriptions
         SET 
             user_id = $1,
@@ -678,79 +780,79 @@ func (r *PostgresSubscriptionRepository) Update(ctx context.Context, subscriptio
         RETURNING id
     `
 
-    var cancelAt sql.NullTime
-    if subscription.CancelAt != nil {
-        cancelAt.Time = *subscription.CancelAt
-        cancelAt.Valid = true
-    }
+	var cancelAt sql.NullTime
+	if subscription.CancelAt != nil {
+		cancelAt.Time = *subscription.CancelAt
+		cancelAt.Valid = true
+	}
 
-    var canceledAt sql.NullTime
-    if subscription.CanceledAt != nil {
-        canceledAt.Time = *subscription.CanceledAt
-        canceledAt.Valid = true
-    }
+	var canceledAt sql.NullTime
+	if subscription.CanceledAt != nil {
+		canceledAt.Time = *subscription.CanceledAt
+		canceledAt.Valid = true
+	}
 
-    var endedAt sql.NullTime
-    if subscription.EndedAt != nil {
-        endedAt.Time = *subscription.EndedAt
-        endedAt.Valid = true
-    }
+	var endedAt sql.NullTime
+	if subscription.EndedAt != nil {
+		endedAt.Time = *subscription.EndedAt
+		endedAt.Valid = true
+	}
 
-    var trialStart sql.NullTime
-    if subscription.TrialStart != nil {
-        trialStart.Time = *subscription.TrialStart
-        trialStart.Valid = true
-    }
+	var trialStart sql.NullTime
+	if subscription.TrialStart != nil {
+		trialStart.Time = *subscription.TrialStart
+		trialStart.Valid = true
+	}
 
-    var trialEnd sql.NullTime
-    if subscription.TrialEnd != nil {
-        trialEnd.Time = *subscription.TrialEnd
-        trialEnd.Valid = true
-    }
+	var trialEnd sql.NullTime
+	if subscription.TrialEnd != nil {
+		trialEnd.Time = *subscription.TrialEnd
+		trialEnd.Valid = true
+	}
 
-    var resumeAt sql.NullTime
-    if subscription.ResumeAt != nil {
-        resumeAt.Time = *subscription.ResumeAt
-        resumeAt.Valid = true
-    }
+	var resumeAt sql.NullTime
+	if subscription.ResumeAt != nil {
+		resumeAt.Time = *subscription.ResumeAt
+		resumeAt.Valid = true
+	}
 
-    var returnedID uuid.UUID
-    err := r.db.QueryRowContext(
-        ctx,
-        query,
-        subscription.UserID,
-        subscription.PriceID,
-        subscription.Quantity,
-        subscription.Status,
-        subscription.CurrentPeriodStart,
-        subscription.CurrentPeriodEnd,
-        cancelAt,
-        canceledAt,
-        endedAt,
-        trialStart,
-        trialEnd,
-        subscription.UpdatedAt,
-        subscription.StripeSubscriptionID,
-        subscription.StripeCustomerID,
-        subscription.CollectionMethod,
-        subscription.CancelAtPeriodEnd,
-        subscription.Metadata,
-        resumeAt,
-        subscription.ID,
-    ).Scan(&returnedID)
+	var returnedID uuid.UUID
+	err := r.db.QueryRowContext(
+		ctx,
+		query,
+		subscription.UserID,
+		subscription.PriceID,
+		subscription.Quantity,
+		subscription.Status,
+		subscription.CurrentPeriodStart,
+		subscription.CurrentPeriodEnd,
+		cancelAt,
+		canceledAt,
+		endedAt,
+		trialStart,
+		trialEnd,
+		subscription.UpdatedAt,
+		subscription.StripeSubscriptionID,
+		subscription.StripeCustomerID,
+		subscription.CollectionMethod,
+		subscription.CancelAtPeriodEnd,
+		subscription.Metadata,
+		resumeAt,
+		subscription.ID,
+	).Scan(&returnedID)
 
-    if err != nil {
-        if err == sql.ErrNoRows {
-            return ErrSubscriptionNotFound
-        }
-        // Check for unique violation
-        if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
-            return ErrSubscriptionExists
-        }
-        return fmt.Errorf("error updating subscription: %w", err)
-    }
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrSubscriptionNotFound
+		}
+		// Check for unique violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			return ErrSubscriptionExists
+		}
+		return fmt.Errorf("error updating subscription: %w", err)
+	}
 
-    return nil
+	return nil
 }
 
 func (r *PostgresSubscriptionRepository) Delete(ctx context.Context, id uuid.UUID) error {

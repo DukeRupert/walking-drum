@@ -409,6 +409,180 @@ func (h *SubscriptionHandler) GetCustomerSubscriptions(w http.ResponseWriter, r 
 		Msg("Subscriptions returned successfully")
 }
 
+// ListSubscriptions retrieves a list of all subscriptions with optional filtering and pagination
+func (h *SubscriptionHandler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
+    logger := log.With().
+        Str("handler", "SubscriptionHandler").
+        Str("method", "ListSubscriptions").
+        Logger()
+
+    logger.Debug().Msg("Processing list subscriptions request")
+
+    // Parse query parameters
+    limitStr := r.URL.Query().Get("limit")
+    offsetStr := r.URL.Query().Get("offset")
+    status := r.URL.Query().Get("status")
+    userIDStr := r.URL.Query().Get("user_id")
+
+    logger.Debug().
+        Str("limitRaw", limitStr).
+        Str("offsetRaw", offsetStr).
+        Str("status", status).
+        Str("userIdRaw", userIDStr).
+        Msg("Parsed query parameters")
+
+    limit := 10 // Default
+    offset := 0 // Default
+
+    if limitStr != "" {
+        parsedLimit, err := strconv.Atoi(limitStr)
+        if err == nil && parsedLimit > 0 {
+            limit = parsedLimit
+        } else if err != nil {
+            logger.Warn().
+                Err(err).
+                Str("limitRaw", limitStr).
+                Msg("Invalid limit parameter, using default")
+        }
+    }
+
+    if offsetStr != "" {
+        parsedOffset, err := strconv.Atoi(offsetStr)
+        if err == nil && parsedOffset >= 0 {
+            offset = parsedOffset
+        } else if err != nil {
+            logger.Warn().
+                Err(err).
+                Str("offsetRaw", offsetStr).
+                Msg("Invalid offset parameter, using default")
+        }
+    }
+
+    logger.Debug().
+        Int("limit", limit).
+        Int("offset", offset).
+        Str("status", status).
+        Str("userIDStr", userIDStr).
+        Msg("Using pagination parameters")
+
+    var subscriptions []*models.Subscription
+    var err error
+
+    // If both userID and status are provided
+    if userIDStr != "" && status != "" {
+        userID, err := uuid.Parse(userIDStr)
+        if err != nil {
+            logger.Error().Err(err).Str("userIdRaw", userIDStr).Msg("Invalid user ID")
+            http.Error(w, "Invalid user ID", http.StatusBadRequest)
+            return
+        }
+
+        logger.Debug().
+            Str("userId", userID.String()).
+            Str("status", status).
+            Int("limit", limit).
+            Int("offset", offset).
+            Msg("Retrieving subscriptions by user ID and status")
+
+        subscriptions, err = h.subscriptionService.GetSubscriptionsByUserIDAndStatus(r.Context(), userID, status, limit, offset)
+        if err != nil {
+            logger.Error().
+                Err(err).
+                Str("userId", userID.String()).
+                Str("status", status).
+                Msg("Failed to retrieve subscriptions by user ID and status")
+            http.Error(w, "Failed to retrieve subscriptions: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+    } else if userIDStr != "" {
+        // If only userID is provided
+        userID, err := uuid.Parse(userIDStr)
+        if err != nil {
+            logger.Error().Err(err).Str("userIdRaw", userIDStr).Msg("Invalid user ID")
+            http.Error(w, "Invalid user ID", http.StatusBadRequest)
+            return
+        }
+
+        logger.Debug().
+            Str("userId", userID.String()).
+            Int("limit", limit).
+            Int("offset", offset).
+            Msg("Retrieving subscriptions by user ID")
+
+        subscriptions, err = h.subscriptionService.GetUserSubscriptions(userID, "", limit, offset)
+        if err != nil {
+            logger.Error().
+                Err(err).
+                Str("userId", userID.String()).
+                Msg("Failed to retrieve subscriptions by user ID")
+            http.Error(w, "Failed to retrieve subscriptions: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+    } else if status != "" {
+        // If only status is provided
+        logger.Debug().
+            Str("status", status).
+            Int("limit", limit).
+            Int("offset", offset).
+            Msg("Retrieving subscriptions by status")
+
+        subscriptions, err = h.subscriptionService.GetSubscriptionsByStatus(r.Context(), status, limit, offset)
+        if err != nil {
+            logger.Error().
+                Err(err).
+                Str("status", status).
+                Msg("Failed to retrieve subscriptions by status")
+            http.Error(w, "Failed to retrieve subscriptions: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+    } else {
+        // If no filters are provided, get all subscriptions
+        logger.Debug().
+            Int("limit", limit).
+            Int("offset", offset).
+            Msg("Retrieving all subscriptions")
+
+        subscriptions, err = h.subscriptionService.GetAllSubscriptions(r.Context(), limit, offset)
+        if err != nil {
+            logger.Error().
+                Err(err).
+                Msg("Failed to retrieve all subscriptions")
+            http.Error(w, "Failed to retrieve subscriptions: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+    }
+
+    logger.Debug().
+        Int("count", len(subscriptions)).
+        Msg("Successfully retrieved subscriptions")
+
+    // Convert to response
+    var responses []SubscriptionResponse
+    for _, sub := range subscriptions {
+        resp, err := h.modelToResponse(sub)
+        if err != nil {
+            logger.Error().
+                Err(err).
+                Str("subscriptionID", sub.ID.String()).
+                Msg("Failed to generate subscription response")
+            http.Error(w, "Failed to generate response", http.StatusInternalServerError)
+            return
+        }
+        responses = append(responses, resp)
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    if err := json.NewEncoder(w).Encode(responses); err != nil {
+        logger.Error().Err(err).Msg("Failed to encode JSON response")
+        http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+        return
+    }
+
+    logger.Info().
+        Int("count", len(responses)).
+        Msg("Subscriptions returned successfully")
+}
+
 // UpdateSubscription handles updating a subscription
 func (h *SubscriptionHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	logger := log.With().
@@ -802,4 +976,39 @@ func NewSubscriptionResponse(subscription *models.Subscription) (map[string]inte
 	}
 
 	return response, nil
+}
+
+// Helper function to convert a subscription model to a response object
+func (h *SubscriptionHandler) modelToResponse(subscription *models.Subscription) (SubscriptionResponse, error) {
+    // Check if metadata exists
+    var metadata map[string]interface{}
+    if subscription.Metadata != nil {
+        metadata = *subscription.Metadata
+    }
+    
+    return SubscriptionResponse{
+        ID:                 subscription.ID,
+        UserID:             subscription.UserID,
+        PriceID:            subscription.PriceID,
+        Quantity:           subscription.Quantity,
+        Status:             string(subscription.Status),
+        CollectionMethod:   subscription.CollectionMethod,
+        Currency:           "usd", // You may need to add this field to your model or get it from Price
+        CustomerId:         subscription.StripeCustomerID,
+        CurrentPeriodStart: subscription.CurrentPeriodStart,
+        CurrentPeriodEnd:   subscription.CurrentPeriodEnd,
+        CancelAt:           subscription.CancelAt,
+        CancelAtPeriodEnd:  subscription.CancelAtPeriodEnd,
+        CanceledAt:         subscription.CanceledAt,
+        EndedAt:            subscription.EndedAt,
+        TrialStart:         subscription.TrialStart,
+        TrialEnd:           subscription.TrialEnd,
+        ResumeAt:           subscription.ResumeAt, // This is in your model
+        LatestInvoiceID:    "", // This needs to be added to your model if needed
+        PaymentMethodID:    "", // This needs to be added to your model if needed
+        StripeID:           subscription.StripeSubscriptionID,
+        CreatedAt:          subscription.CreatedAt,
+        UpdatedAt:          subscription.UpdatedAt,
+        Metadata:           metadata,
+    }, nil
 }

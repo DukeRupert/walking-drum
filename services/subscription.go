@@ -182,6 +182,27 @@ func (s *SubscriptionService) CreateSubscription(req CreateSubscriptionRequest) 
 	return subscription, nil
 }
 
+// GetAllSubscriptions retrieves all subscriptions with pagination
+func (s *SubscriptionService) GetAllSubscriptions(ctx context.Context, limit, offset int) ([]*models.Subscription, error) {
+    return s.subscriptionRepo.List(ctx, limit, offset)
+}
+
+// GetSubscriptionsByStatus retrieves subscriptions with a specific status
+func (s *SubscriptionService) GetSubscriptionsByStatus(ctx context.Context, status string, limit, offset int) ([]*models.Subscription, error) {
+    return s.subscriptionRepo.ListByStatus(ctx, models.SubscriptionStatus(status), limit, offset)
+}
+
+// GetSubscriptionsByUserIDAndStatus retrieves subscriptions for a specific user with a specific status
+func (s *SubscriptionService) GetSubscriptionsByUserIDAndStatus(ctx context.Context, userID uuid.UUID, status string, limit, offset int) ([]*models.Subscription, error) {
+    // First verify the user exists
+    _, err := s.userRepo.GetByID(ctx, userID)
+    if err != nil {
+        return nil, err
+    }
+    
+    return s.subscriptionRepo.ListByUserIDAndStatus(ctx, userID, models.SubscriptionStatus(status), limit, offset)
+}
+
 // ProcessWebhook processes a webhook event from the payment processor
 func (s *SubscriptionService) ProcessWebhook(body []byte, signature string) (interface{}, error) {
 	// Pass the webhook to the payment processor for verification and parsing
