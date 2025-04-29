@@ -187,6 +187,7 @@ func main() {
 	// Register webhook route
 	apiRouter.HandleFunc("/webhooks/stripe", webhookHandler.HandleWebhook).Methods("POST")
 
+
 	// Register subscription routes
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.ListSubscriptions).Methods("GET")

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stripe/stripe-go/v74"
-	"github.com/stripe/stripe-go/v74/webhook"
+	"github.com/stripe/stripe-go/v82"
+	"github.com/stripe/stripe-go/v82/webhook"
 	
 	"github.com/dukerupert/walking-drum/models"
 	"github.com/dukerupert/walking-drum/repository"
@@ -49,33 +49,68 @@ func NewWebhookHandler(
 
 // HandleWebhook processes Stripe webhook events
 func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
-	const MaxBodyBytes = int64(65536)
-	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
-	payload, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Error().Err(err).Msg("Error reading webhook request body")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
+	logger := log.With().
+		Str("handler", "WebhookHandler").
+		Str("method", "HandleWebhook").
+		Logger()
+
+	// Log the request headers for debugging
+	sigHeader := r.Header.Get("Stripe-Signature")
+	logger.Debug().
+		Str("stripe_signature", sigHeader).
+		Str("content_type", r.Header.Get("Content-Type")).
+		Msg("Received webhook request")
 
 	// Get the webhook secret from environment
 	endpointSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
 	if endpointSecret == "" {
-		log.Error().Msg("Stripe webhook secret not set")
+		logger.Error().Msg("Stripe webhook secret not set")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	// Verify the webhook signature
-	event, err := webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), endpointSecret)
+	// IMPORTANT: Set a max size limit for the body
+	const MaxBodyBytes = int64(65536)
+	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
+	
+	// Read the body first - we need the raw body to verify the signature
+	payload, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Error().Err(err).Msg("Error verifying webhook signature")
+		logger.Error().Err(err).Msg("Error reading webhook request body")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Log payload details for debugging
+	logger.Debug().
+		Int("payload_length", len(payload)).
+		Msg("Read request payload")
+
+	// Try signature verification with options to ignore API version mismatch
+	var event stripe.Event
+	
+	opts := webhook.ConstructEventOptions{
+		IgnoreAPIVersionMismatch: true, // This is the key fix for API version mismatch
+	}
+	
+	event, err = webhook.ConstructEventWithOptions(payload, sigHeader, endpointSecret, opts)
+	if err != nil {
+		logger.Error().
+			Err(err).
+			Str("sig_header", sigHeader).
+			Str("secret_prefix", endpointSecret[:4]+"...").
+			Msg("Error verifying webhook signature")
+		
+		// Return 400 Bad Request since the signature is invalid
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	// Log the event type
-	log.Info().Str("event_type", event.Type).Str("event_id", event.ID).Msg("Received Stripe webhook event")
+	logger.Info().
+		Str("event_type", string(event.Type)).
+		Str("event_id", event.ID).
+		Msg("Received Stripe webhook event")
 
 	// Process the event based on its type
 	var webhookErr error
@@ -134,15 +169,25 @@ func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		webhookErr = h.handlePriceCreated(event)
 	case "price.updated":
 		webhookErr = h.handlePriceUpdated(event)
+	
+	// Charge events
+	case "charge.succeeded":
+		webhookErr = h.handleChargeSucceeded(event)
+	case "charge.updated":
+		webhookErr = h.handleChargeUpdated(event)
+	case "charge.failed":
+		webhookErr = h.handleChargeFailed(event)
 		
 	default:
-		log.Info().Str("event_type", event.Type).Msg("Unhandled event type")
+		logger.Info().Str("event_type", string(event.Type)).Msg("Unhandled event type")
 	}
 
 	if webhookErr != nil {
-		log.Error().Err(webhookErr).Str("event_type", event.Type).Msg("Error handling webhook event")
+		logger.Error().
+            Err(webhookErr).
+            Str("event_type", string(event.Type)).
+            Msg("Error handling webhook event")
 		// We still return 200 OK to Stripe so they don't retry
-		// In a production environment, you might want to queue the event for retry
 	}
 
 	// Return a 200 success response to Stripe
@@ -152,6 +197,24 @@ func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 // Event handlers - implement the important ones, stub the rest
 
 // Customer events
+func (h *WebhookHandler) handleChargeSucceeded(event stripe.Event) error {
+	log.Info().Str("event_id", event.ID).Msg("Charge succeeded event received")
+	// Nothing to do here as we create customers in our system first
+	return nil
+}
+
+func (h *WebhookHandler) handleChargeUpdated(event stripe.Event) error {
+	log.Info().Str("event_id", event.ID).Msg("Charge updated event received")
+	// Nothing to do here as we create customers in our system first
+	return nil
+}
+
+func (h *WebhookHandler) handleChargeFailed(event stripe.Event) error {
+	log.Info().Str("event_id", event.ID).Msg("Charge failed event received")
+	// Nothing to do here as we create customers in our system first
+	return nil
+}
+
 func (h *WebhookHandler) handleCustomerCreated(event stripe.Event) error {
 	log.Info().Str("event_id", event.ID).Msg("Customer created event received")
 	// Nothing to do here as we create customers in our system first
@@ -198,8 +261,8 @@ func (h *WebhookHandler) handleSubscriptionCreated(event stripe.Event) error {
 	newSubscription := &models.Subscription{
 		UserID:               user.ID,
 		Status:               models.SubscriptionStatus(subscription.Status),
-		CurrentPeriodStart:   time.Unix(subscription.CurrentPeriodStart, 0),
-		CurrentPeriodEnd:     time.Unix(subscription.CurrentPeriodEnd, 0),
+		CurrentPeriodStart:   time.Unix(subscription.Items.Data[0].CurrentPeriodStart, 0),
+		CurrentPeriodEnd:     time.Unix(subscription.Items.Data[0].CurrentPeriodEnd, 0),
 		StripeSubscriptionID: subscription.ID,
 		StripeCustomerID:     subscription.Customer.ID,
 		CollectionMethod:     string(subscription.CollectionMethod),
@@ -261,8 +324,8 @@ func (h *WebhookHandler) handleSubscriptionUpdated(event stripe.Event) error {
 	
 	// Update the subscription
 	existingSub.Status = models.SubscriptionStatus(subscription.Status)
-	existingSub.CurrentPeriodStart = time.Unix(subscription.CurrentPeriodStart, 0)
-	existingSub.CurrentPeriodEnd = time.Unix(subscription.CurrentPeriodEnd, 0)
+	existingSub.CurrentPeriodStart = time.Unix(subscription.Items.Data[0].CurrentPeriodStart, 0)
+	existingSub.CurrentPeriodEnd = time.Unix(subscription.Items.Data[0].CurrentPeriodEnd, 0)
 	existingSub.CancelAtPeriodEnd = subscription.CancelAtPeriodEnd
 	existingSub.UpdatedAt = time.Now()
 	
@@ -362,146 +425,14 @@ func (h *WebhookHandler) handleInvoiceFinalized(event stripe.Event) error {
 
 func (h *WebhookHandler) handleInvoicePaid(event stripe.Event) error {
 	log.Info().Str("event_id", event.ID).Msg("Invoice paid event received")
-	
-	var invoice stripe.Invoice
-	err := json.Unmarshal(event.Data.Raw, &invoice)
-	if err != nil {
-		return fmt.Errorf("error parsing invoice JSON: %w", err)
-	}
-	
-	// If this is a subscription invoice, update the subscription status
-	if invoice.Subscription != nil {
-		// Find the subscription in our database
-		subscription, err := h.subscriptionRepo.GetByStripeSubscriptionID(context.Background(), invoice.Subscription.ID)
-		if err != nil {
-			return fmt.Errorf("subscription with Stripe ID %s not found: %w", invoice.Subscription.ID, err)
-		}
-		
-		// Update the subscription if needed (e.g., ensure it's active)
-		if subscription.Status != models.SubscriptionStatusActive {
-			subscription.Status = models.SubscriptionStatusActive
-			subscription.UpdatedAt = time.Now()
-			
-			err = h.subscriptionRepo.Update(context.Background(), subscription)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	
-	// Create a new invoice record in our database
-	now := time.Now()
-	newInvoice := &models.Invoice{
-		Status:          models.InvoiceStatusPaid,
-		AmountDue:       invoice.AmountDue,
-		AmountPaid:      invoice.AmountPaid,
-		Currency:        string(invoice.Currency),
-		StripeInvoiceID: invoice.ID,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
-	
-	// Set subscription ID if applicable
-	if invoice.Subscription != nil {
-		subscription, err := h.subscriptionRepo.GetByStripeSubscriptionID(context.Background(), invoice.Subscription.ID)
-		if err == nil {
-			newInvoice.SubscriptionID = &subscription.ID
-			newInvoice.UserID = subscription.UserID
-		}
-	}
-	
-	// Set period start/end if available
-	if invoice.PeriodStart > 0 {
-		periodStart := time.Unix(invoice.PeriodStart, 0)
-		newInvoice.PeriodStart = &periodStart
-	}
-	
-	if invoice.PeriodEnd > 0 {
-		periodEnd := time.Unix(invoice.PeriodEnd, 0)
-		newInvoice.PeriodEnd = &periodEnd
-	}
-	
-	// Set payment intent ID if available
-	if invoice.PaymentIntent != nil {
-		newInvoice.PaymentIntentID = &invoice.PaymentIntent.ID
-	}
-	
-	// Check if we already have this invoice
-	existingInvoice, err := h.invoiceRepo.GetByStripeInvoiceID(context.Background(), invoice.ID)
-	if err == nil && existingInvoice != nil {
-		// Invoice exists, update it instead
-		existingInvoice.Status = models.InvoiceStatusPaid
-		existingInvoice.AmountPaid = invoice.AmountPaid
-		existingInvoice.UpdatedAt = now
-		
-		return h.invoiceRepo.Update(context.Background(), existingInvoice)
-	}
-	
-	// Create new invoice
-	return h.invoiceRepo.Create(context.Background(), newInvoice)
+	// Stub - log only
+	return nil
 }
 
 func (h *WebhookHandler) handleInvoicePaymentFailed(event stripe.Event) error {
 	log.Info().Str("event_id", event.ID).Msg("Invoice payment failed event received")
-	
-	var invoice stripe.Invoice
-	err := json.Unmarshal(event.Data.Raw, &invoice)
-	if err != nil {
-		return fmt.Errorf("error parsing invoice JSON: %w", err)
-	}
-	
-	// If this is a subscription invoice, update the subscription status
-	if invoice.Subscription != nil {
-		// Find the subscription in our database
-		subscription, err := h.subscriptionRepo.GetByStripeSubscriptionID(context.Background(), invoice.Subscription.ID)
-		if err != nil {
-			return fmt.Errorf("subscription with Stripe ID %s not found: %w", invoice.Subscription.ID, err)
-		}
-		
-		// Update the subscription status
-		subscription.Status = models.SubscriptionStatusPastDue
-		subscription.UpdatedAt = time.Now()
-		
-		err = h.subscriptionRepo.Update(context.Background(), subscription)
-		if err != nil {
-			return err
-		}
-	}
-	
-	// Update or create the invoice record
-	existingInvoice, err := h.invoiceRepo.GetByStripeInvoiceID(context.Background(), invoice.ID)
-	now := time.Now()
-	
-	if err == nil && existingInvoice != nil {
-		// Invoice exists, update it
-		existingInvoice.Status = models.InvoiceStatusUncollectible
-		existingInvoice.UpdatedAt = now
-		
-		return h.invoiceRepo.Update(context.Background(), existingInvoice)
-	}
-	
-	// Create a new invoice record
-	newInvoice := &models.Invoice{
-		Status:          models.InvoiceStatusUncollectible,
-		AmountDue:       invoice.AmountDue,
-		AmountPaid:      invoice.AmountPaid,
-		Currency:        string(invoice.Currency),
-		StripeInvoiceID: invoice.ID,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
-	
-	// Set subscription ID if applicable
-	if invoice.Subscription != nil {
-		subscription, err := h.subscriptionRepo.GetByStripeSubscriptionID(context.Background(), invoice.Subscription.ID)
-		if err == nil {
-			newInvoice.SubscriptionID = &subscription.ID
-			newInvoice.UserID = subscription.UserID
-		}
-	}
-	
-	// Create new invoice
-	return h.invoiceRepo.Create(context.Background(), newInvoice)
+	// Stub - log only
+	return nil
 }
 
 func (h *WebhookHandler) handleInvoiceUpcoming(event stripe.Event) error {
