@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
   const userId = url.searchParams.get('user_id') || '';
   
   // Construct the API URL with query parameters
-  const apiUrl = new URL('http://localhost:8080/subscriptions');
+  const apiUrl = new URL('http://localhost:8080/api/subscriptions');
   apiUrl.searchParams.set('limit', limit);
   apiUrl.searchParams.set('offset', offset);
   

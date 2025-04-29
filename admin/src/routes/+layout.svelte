@@ -65,10 +65,8 @@
 		{ href: '/products', label: 'Products', icon: 'box' as const },
 		{ href: '/prices', label: 'Prices', icon: 'tag' as const },
 		{ href: '/invoices', label: 'Invoices', icon: 'receipt' as const },
-		{ href: '/carts', label: 'Carts', icon: 'shoppingCart' as const },
 		{ href: '/orders', label: 'Orders', icon: 'package' as const },
 		{ href: '/subscriptions', label: 'Subscriptions', icon: 'repeat' as const },
-		{ href: '/customers', label: 'Customers', icon: 'users' as const },
 		{ href: '/users', label: 'Users', icon: 'user' as const }
 	];
 </script>
