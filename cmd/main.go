@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/pressly/goose/v3"
 	"github.com/rs/zerolog"
@@ -36,11 +37,22 @@ func init() {
 var embedMigrations embed.FS
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error loading .env file")
+	}
 	// Get database connection details from environment variables
 	dbUser := os.Getenv("POSTGRES_USER")
 	dbPassword := os.Getenv("POSTGRES_PASSWORD")
 	dbName := os.Getenv("POSTGRES_DB")
 	dbHost := os.Getenv("POSTGRES_HOSTNAME")
+
+	log.Debug().
+		Str("dbUser", dbUser).
+		Str("dbPassword", "***").
+		Str("dbName", dbName).
+		Str("dbHost", dbHost).
+		Msg("Database connection parameters")
 
 	// Create PostgreSQL connection string
 	dbConnectionString := fmt.Sprintf(
@@ -186,7 +198,6 @@ func main() {
 
 	// Register webhook route
 	apiRouter.HandleFunc("/webhooks/stripe", webhookHandler.HandleWebhook).Methods("POST")
-
 
 	// Register subscription routes
 	apiRouter.HandleFunc("/subscriptions", subscriptionHandler.CreateSubscription).Methods("POST")
