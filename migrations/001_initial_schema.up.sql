@@ -11,19 +11,19 @@ CREATE TABLE IF NOT EXISTS products (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create prices table
-CREATE TABLE IF NOT EXISTS prices (
+-- Create a new product_prices table for Stripe prices
+CREATE TABLE IF NOT EXISTS product_prices (
     id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(id),
     stripe_price_id VARCHAR(255) UNIQUE NOT NULL,
-    product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-    nickname VARCHAR(255),
-    unit_amount INTEGER NOT NULL,
-    currency VARCHAR(3) DEFAULT 'USD',
-    recurring_interval VARCHAR(10) NOT NULL, -- 'week', 'month'
-    recurring_interval_count INTEGER DEFAULT 1,
+    weight VARCHAR(50) NOT NULL,  -- e.g., "12oz", "3lb", "5lb"
+    grind VARCHAR(50) NOT NULL,   -- e.g., "Whole Bean", "Drip Ground"
+    price DECIMAL(10, 2) NOT NULL,
+    is_default BOOLEAN DEFAULT FALSE,
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(product_id, weight, grind)
 );
 
 -- Create customers table
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     id SERIAL PRIMARY KEY,
     stripe_subscription_id VARCHAR(255) UNIQUE NOT NULL,
     customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-    price_id INTEGER REFERENCES prices(id) ON DELETE RESTRICT,
+    price_id INTEGER REFERENCES product_prices(id) ON DELETE RESTRICT,
     status VARCHAR(50) NOT NULL, -- 'active', 'canceled', 'past_due', 'incomplete', etc.
     current_period_start TIMESTAMP WITH TIME ZONE,
     current_period_end TIMESTAMP WITH TIME ZONE,
@@ -76,14 +76,3 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     processed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Create indices for common queries
-CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
-CREATE INDEX IF NOT EXISTS idx_prices_product_id ON prices(product_id);
-CREATE INDEX IF NOT EXISTS idx_prices_active ON prices(active);
-CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
-CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer_id ON customer_addresses(customer_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_customer_id ON subscriptions(customer_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
-CREATE INDEX IF NOT EXISTS idx_webhook_events_type ON webhook_events(type);
-CREATE INDEX IF NOT EXISTS idx_webhook_events_processed ON webhook_events(processed);

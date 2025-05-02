@@ -9,8 +9,9 @@
 		"ghcr.io/jungaretti/features/make:1": {},
 		"ghcr.io/r3dpoint/devcontainer-features/tailwindcss-standalone-cli:1": {},
 		"ghcr.io/dusansimic/devcontainer-features/templ:0": {},
-		"ghcr.io/devcontainers/features/node:1": {}
-	}
+		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/itsmechlark/features/postgresql:1": {}
+	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
@@ -19,7 +20,7 @@
 	// "customizations": {},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [5432],
+	"forwardPorts": [5432]
 
 	// Use 'postCreateCommand' to run commands after the container is created.
 	// "postCreateCommand": "go version",
