@@ -25,7 +25,7 @@ func NewProductRepository(db *pgxpool.Pool) repository.ProductRepository {
 }
 
 // Create adds a new product to the database
-func (r *ProductRepository) Create(ctx context.Context, product *domain.Product) error {
+func (r *ProductRepository) Create(ctx context.Context, product *models.Product) error {
 	query := `
 		INSERT INTO products (
 			stripe_product_id, name, description, origin, roast_level, active
@@ -53,7 +53,7 @@ func (r *ProductRepository) Create(ctx context.Context, product *domain.Product)
 }
 
 // GetByID retrieves a product by its ID
-func (r *ProductRepository) GetByID(ctx context.Context, id int64) (*domain.Product, error) {
+func (r *ProductRepository) GetByID(ctx context.Context, id int64) (*models.Product, error) {
 	query := `
 		SELECT id, stripe_product_id, name, description, origin, roast_level, 
 		       active, created_at, updated_at
@@ -61,7 +61,7 @@ func (r *ProductRepository) GetByID(ctx context.Context, id int64) (*domain.Prod
 		WHERE id = $1
 	`
 
-	product := &domain.Product{}
+	product := &models.Product{}
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&product.ID,
 		&product.StripeProductID,
@@ -85,7 +85,7 @@ func (r *ProductRepository) GetByID(ctx context.Context, id int64) (*domain.Prod
 }
 
 // ListActive retrieves all active products
-func (r *ProductRepository) ListActive(ctx context.Context) ([]*domain.Product, error) {
+func (r *ProductRepository) ListActive(ctx context.Context) ([]*models.Product, error) {
 	query := `
 		SELECT id, stripe_product_id, name, description, origin, roast_level, 
 		       active, created_at, updated_at
@@ -100,9 +100,9 @@ func (r *ProductRepository) ListActive(ctx context.Context) ([]*domain.Product, 
 	}
 	defer rows.Close()
 
-	products := []*domain.Product{}
+	products := []*models.Product{}
 	for rows.Next() {
-		product := &domain.Product{}
+		product := &models.Product{}
 		err := rows.Scan(
 			&product.ID,
 			&product.StripeProductID,
@@ -128,7 +128,7 @@ func (r *ProductRepository) ListActive(ctx context.Context) ([]*domain.Product, 
 }
 
 // Update updates an existing product
-func (r *ProductRepository) Update(ctx context.Context, product *domain.Product) error {
+func (r *ProductRepository) Update(ctx context.Context, product *models.Product) error {
 	query := `
 		UPDATE products
 		SET stripe_product_id = $1, name = $2, description = $3, 
@@ -181,7 +181,7 @@ func (r *ProductRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // GetWithPrices retrieves a product with all its prices
-func (r *ProductRepository) GetWithPrices(ctx context.Context, id int64) (*domain.Product, error) {
+func (r *ProductRepository) GetWithPrices(ctx context.Context, id int64) (*models.Product, error) {
 	// First get the product
 	product, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -204,7 +204,7 @@ func (r *ProductRepository) GetWithPrices(ctx context.Context, id int64) (*domai
 	defer rows.Close()
 
 	for rows.Next() {
-		price := domain.ProductPrice{}
+		price := models.ProductPrice{}
 		err := rows.Scan(
 			&price.ID,
 			&price.ProductID,
@@ -231,7 +231,7 @@ func (r *ProductRepository) GetWithPrices(ctx context.Context, id int64) (*domai
 }
 
 // ListActiveWithPrices retrieves all active products with their prices
-func (r *ProductRepository) ListActiveWithPrices(ctx context.Context) ([]*domain.Product, error) {
+func (r *ProductRepository) ListActiveWithPrices(ctx context.Context) ([]*models.Product, error) {
 	// First get all active products
 	products, err := r.ListActive(ctx)
 	if err != nil {
@@ -244,7 +244,7 @@ func (r *ProductRepository) ListActiveWithPrices(ctx context.Context) ([]*domain
 	}
 
 	// Create a map of product IDs for easier lookup
-	productMap := make(map[int64]*domain.Product)
+	productMap := make(map[int64]*models.Product)
 	productIDs := make([]interface{}, len(products))
 	
 	for i, product := range products {
@@ -278,7 +278,7 @@ func (r *ProductRepository) ListActiveWithPrices(ctx context.Context) ([]*domain
 
 	// Process the results
 	for rows.Next() {
-		price := domain.ProductPrice{}
+		price := models.ProductPrice{}
 		err := rows.Scan(
 			&price.ID,
 			&price.ProductID,
@@ -305,4 +305,36 @@ func (r *ProductRepository) ListActiveWithPrices(ctx context.Context) ([]*domain
 	}
 
 	return products, nil
+}
+
+// GetByStripeID retrieves a product by its Stripe ID
+func (r *ProductRepository) GetByStripeID(ctx context.Context, stripeID string) (*models.Product, error) {
+	query := `
+		SELECT id, stripe_product_id, name, description, origin, roast_level, 
+		       active, created_at, updated_at
+		FROM products
+		WHERE stripe_product_id = $1
+	`
+
+	product := &models.Product{}
+	err := r.db.QueryRow(ctx, query, stripeID).Scan(
+		&product.ID,
+		&product.StripeProductID,
+		&product.Name,
+		&product.Description,
+		&product.Origin,
+		&product.RoastLevel,
+		&product.Active,
+		&product.CreatedAt,
+		&product.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("product not found: %w", err)
+		}
+		return nil, fmt.Errorf("failed to get product by Stripe ID: %w", err)
+	}
+
+	return product, nil
 }

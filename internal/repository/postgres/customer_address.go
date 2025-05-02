@@ -26,7 +26,7 @@ func NewCustomerAddressRepository(db *pgxpool.Pool) repository.CustomerAddressRe
 }
 
 // Create adds a new customer address to the database
-func (r *CustomerAddressRepository) Create(ctx context.Context, address *domain.CustomerAddress) error {
+func (r *CustomerAddressRepository) Create(ctx context.Context, address *models.CustomerAddress) error {
 	// Start a transaction
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -81,7 +81,7 @@ func (r *CustomerAddressRepository) Create(ctx context.Context, address *domain.
 }
 
 // GetByID retrieves a customer address by its ID
-func (r *CustomerAddressRepository) GetByID(ctx context.Context, id int64) (*domain.CustomerAddress, error) {
+func (r *CustomerAddressRepository) GetByID(ctx context.Context, id int64) (*models.CustomerAddress, error) {
 	query := `
 		SELECT id, customer_id, line1, line2, city, state, postal_code, country, 
 		       is_default, created_at, updated_at
@@ -89,7 +89,7 @@ func (r *CustomerAddressRepository) GetByID(ctx context.Context, id int64) (*dom
 		WHERE id = $1
 	`
 
-	address := &domain.CustomerAddress{}
+	address := &models.CustomerAddress{}
 	var line2Null pgtype.Text
 	
 	err := r.db.QueryRow(ctx, query, id).Scan(
@@ -121,7 +121,7 @@ func (r *CustomerAddressRepository) GetByID(ctx context.Context, id int64) (*dom
 }
 
 // ListByCustomerID retrieves all addresses for a customer
-func (r *CustomerAddressRepository) ListByCustomerID(ctx context.Context, customerID int64) ([]*domain.CustomerAddress, error) {
+func (r *CustomerAddressRepository) ListByCustomerID(ctx context.Context, customerID int64) ([]*models.CustomerAddress, error) {
 	query := `
 		SELECT id, customer_id, line1, line2, city, state, postal_code, country, 
 		       is_default, created_at, updated_at
@@ -136,9 +136,9 @@ func (r *CustomerAddressRepository) ListByCustomerID(ctx context.Context, custom
 	}
 	defer rows.Close()
 
-	addresses := []*domain.CustomerAddress{}
+	addresses := []*models.CustomerAddress{}
 	for rows.Next() {
-		address := &domain.CustomerAddress{}
+		address := &models.CustomerAddress{}
 		var line2Null pgtype.Text
 		
 		err := rows.Scan(
@@ -173,7 +173,7 @@ func (r *CustomerAddressRepository) ListByCustomerID(ctx context.Context, custom
 }
 
 // Update updates an existing customer address
-func (r *CustomerAddressRepository) Update(ctx context.Context, address *domain.CustomerAddress) error {
+func (r *CustomerAddressRepository) Update(ctx context.Context, address *models.CustomerAddress) error {
 	// Start a transaction
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -255,7 +255,7 @@ func (r *CustomerAddressRepository) Delete(ctx context.Context, id int64) error 
 }
 
 // GetDefaultForCustomer retrieves the default address for a customer
-func (r *CustomerAddressRepository) GetDefaultForCustomer(ctx context.Context, customerID int64) (*domain.CustomerAddress, error) {
+func (r *CustomerAddressRepository) GetDefaultForCustomer(ctx context.Context, customerID int64) (*models.CustomerAddress, error) {
 	query := `
 		SELECT id, customer_id, line1, line2, city, state, postal_code, country, 
 		       is_default, created_at, updated_at
@@ -264,7 +264,7 @@ func (r *CustomerAddressRepository) GetDefaultForCustomer(ctx context.Context, c
 		LIMIT 1
 	`
 
-	address := &domain.CustomerAddress{}
+	address := &models.CustomerAddress{}
 	var line2Null pgtype.Text
 	
 	err := r.db.QueryRow(ctx, query, customerID).Scan(

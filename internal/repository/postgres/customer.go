@@ -26,7 +26,7 @@ func NewCustomerRepository(db *pgxpool.Pool) repository.CustomerRepository {
 }
 
 // Create adds a new customer to the database
-func (r *CustomerRepository) Create(ctx context.Context, customer *domain.Customer) error {
+func (r *CustomerRepository) Create(ctx context.Context, customer *models.Customer) error {
 	query := `
 		INSERT INTO customers (
 			stripe_customer_id, email, name, phone
@@ -52,14 +52,14 @@ func (r *CustomerRepository) Create(ctx context.Context, customer *domain.Custom
 }
 
 // GetByID retrieves a customer by their ID
-func (r *CustomerRepository) GetByID(ctx context.Context, id int64) (*domain.Customer, error) {
+func (r *CustomerRepository) GetByID(ctx context.Context, id int64) (*models.Customer, error) {
 	query := `
 		SELECT id, stripe_customer_id, email, name, phone, created_at, updated_at
 		FROM customers
 		WHERE id = $1
 	`
 
-	customer := &domain.Customer{}
+	customer := &models.Customer{}
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&customer.ID,
 		&customer.StripeCustomerID,
@@ -81,14 +81,14 @@ func (r *CustomerRepository) GetByID(ctx context.Context, id int64) (*domain.Cus
 }
 
 // GetByEmail retrieves a customer by their email
-func (r *CustomerRepository) GetByEmail(ctx context.Context, email string) (*domain.Customer, error) {
+func (r *CustomerRepository) GetByEmail(ctx context.Context, email string) (*models.Customer, error) {
 	query := `
 		SELECT id, stripe_customer_id, email, name, phone, created_at, updated_at
 		FROM customers
 		WHERE email = $1
 	`
 
-	customer := &domain.Customer{}
+	customer := &models.Customer{}
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&customer.ID,
 		&customer.StripeCustomerID,
@@ -110,14 +110,14 @@ func (r *CustomerRepository) GetByEmail(ctx context.Context, email string) (*dom
 }
 
 // GetByStripeID retrieves a customer by their Stripe ID
-func (r *CustomerRepository) GetByStripeID(ctx context.Context, stripeCustomerID string) (*domain.Customer, error) {
+func (r *CustomerRepository) GetByStripeID(ctx context.Context, stripeCustomerID string) (*models.Customer, error) {
 	query := `
 		SELECT id, stripe_customer_id, email, name, phone, created_at, updated_at
 		FROM customers
 		WHERE stripe_customer_id = $1
 	`
 
-	customer := &domain.Customer{}
+	customer := &models.Customer{}
 	err := r.db.QueryRow(ctx, query, stripeCustomerID).Scan(
 		&customer.ID,
 		&customer.StripeCustomerID,
@@ -139,7 +139,7 @@ func (r *CustomerRepository) GetByStripeID(ctx context.Context, stripeCustomerID
 }
 
 // Update updates an existing customer
-func (r *CustomerRepository) Update(ctx context.Context, customer *domain.Customer) error {
+func (r *CustomerRepository) Update(ctx context.Context, customer *models.Customer) error {
 	query := `
 		UPDATE customers
 		SET stripe_customer_id = $1, email = $2, name = $3, phone = $4, updated_at = $5
@@ -205,7 +205,7 @@ func (r *CustomerRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // GetWithAddresses retrieves a customer with all their addresses
-func (r *CustomerRepository) GetWithAddresses(ctx context.Context, id int64) (*domain.Customer, error) {
+func (r *CustomerRepository) GetWithAddresses(ctx context.Context, id int64) (*models.Customer, error) {
 	// First get the customer
 	customer, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -228,7 +228,7 @@ func (r *CustomerRepository) GetWithAddresses(ctx context.Context, id int64) (*d
 	defer rows.Close()
 
 	for rows.Next() {
-		address := domain.CustomerAddress{}
+		address := models.CustomerAddress{}
 		var line2Null pgtype.Text
 		
 		err := rows.Scan(
@@ -263,7 +263,7 @@ func (r *CustomerRepository) GetWithAddresses(ctx context.Context, id int64) (*d
 }
 
 // GetWithSubscriptions retrieves a customer with all their subscriptions
-func (r *CustomerRepository) GetWithSubscriptions(ctx context.Context, id int64) (*domain.Customer, error) {
+func (r *CustomerRepository) GetWithSubscriptions(ctx context.Context, id int64) (*models.Customer, error) {
 	// First get the customer
 	customer, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -293,9 +293,9 @@ func (r *CustomerRepository) GetWithSubscriptions(ctx context.Context, id int64)
 	defer rows.Close()
 
 	for rows.Next() {
-		subscription := domain.Subscription{}
-		price := domain.ProductPrice{}
-		product := domain.Product{}
+		subscription := models.Subscription{}
+		price := models.ProductPrice{}
+		product := models.Product{}
 		
 		var currentPeriodStartNull, currentPeriodEndNull, canceledAtNull pgtype.Time
 		var descriptionNull, originNull, roastLevelNull pgtype.Text

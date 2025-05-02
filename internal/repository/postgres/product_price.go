@@ -25,7 +25,7 @@ func NewProductPriceRepository(db *pgxpool.Pool) repository.ProductPriceReposito
 }
 
 // Create adds a new product price to the database
-func (r *ProductPriceRepository) Create(ctx context.Context, price *domain.ProductPrice) error {
+func (r *ProductPriceRepository) Create(ctx context.Context, price *models.ProductPrice) error {
 	// Start a transaction
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -79,7 +79,7 @@ func (r *ProductPriceRepository) Create(ctx context.Context, price *domain.Produ
 }
 
 // GetByID retrieves a product price by its ID
-func (r *ProductPriceRepository) GetByID(ctx context.Context, id int64) (*domain.ProductPrice, error) {
+func (r *ProductPriceRepository) GetByID(ctx context.Context, id int64) (*models.ProductPrice, error) {
 	query := `
 		SELECT id, product_id, stripe_price_id, weight, grind, price, 
 		       is_default, active, created_at, updated_at
@@ -87,7 +87,7 @@ func (r *ProductPriceRepository) GetByID(ctx context.Context, id int64) (*domain
 		WHERE id = $1
 	`
 
-	price := &domain.ProductPrice{}
+	price := &models.ProductPrice{}
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&price.ID,
 		&price.ProductID,
@@ -112,7 +112,7 @@ func (r *ProductPriceRepository) GetByID(ctx context.Context, id int64) (*domain
 }
 
 // ListByProductID retrieves all prices for a product
-func (r *ProductPriceRepository) ListByProductID(ctx context.Context, productID int64) ([]*domain.ProductPrice, error) {
+func (r *ProductPriceRepository) ListByProductID(ctx context.Context, productID int64) ([]*models.ProductPrice, error) {
 	query := `
 		SELECT id, product_id, stripe_price_id, weight, grind, price, 
 		       is_default, active, created_at, updated_at
@@ -127,9 +127,9 @@ func (r *ProductPriceRepository) ListByProductID(ctx context.Context, productID 
 	}
 	defer rows.Close()
 
-	prices := []*domain.ProductPrice{}
+	prices := []*models.ProductPrice{}
 	for rows.Next() {
-		price := &domain.ProductPrice{}
+		price := &models.ProductPrice{}
 		err := rows.Scan(
 			&price.ID,
 			&price.ProductID,
@@ -156,7 +156,7 @@ func (r *ProductPriceRepository) ListByProductID(ctx context.Context, productID 
 }
 
 // Update updates an existing product price
-func (r *ProductPriceRepository) Update(ctx context.Context, price *domain.ProductPrice) error {
+func (r *ProductPriceRepository) Update(ctx context.Context, price *models.ProductPrice) error {
 	// Start a transaction
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -249,7 +249,7 @@ func (r *ProductPriceRepository) Delete(ctx context.Context, id int64) error {
 }
 
 // GetDefaultForProduct retrieves the default price for a product
-func (r *ProductPriceRepository) GetDefaultForProduct(ctx context.Context, productID int64) (*domain.ProductPrice, error) {
+func (r *ProductPriceRepository) GetDefaultForProduct(ctx context.Context, productID int64) (*models.ProductPrice, error) {
 	query := `
 		SELECT id, product_id, stripe_price_id, weight, grind, price, 
 		       is_default, active, created_at, updated_at
@@ -258,7 +258,7 @@ func (r *ProductPriceRepository) GetDefaultForProduct(ctx context.Context, produ
 		LIMIT 1
 	`
 
-	price := &domain.ProductPrice{}
+	price := &models.ProductPrice{}
 	err := r.db.QueryRow(ctx, query, productID).Scan(
 		&price.ID,
 		&price.ProductID,
@@ -307,6 +307,39 @@ func (r *ProductPriceRepository) GetDefaultForProduct(ctx context.Context, produ
 			return price, nil
 		}
 		return nil, fmt.Errorf("failed to get default price: %w", err)
+	}
+
+	return price, nil
+}
+
+// GetByStripeID retrieves a product price by its Stripe ID
+func (r *ProductPriceRepository) GetByStripeID(ctx context.Context, stripeID string) (*models.ProductPrice, error) {
+	query := `
+		SELECT id, product_id, stripe_price_id, weight, grind, price, 
+		       is_default, active, created_at, updated_at
+		FROM product_prices
+		WHERE stripe_price_id = $1
+	`
+
+	price := &models.ProductPrice{}
+	err := r.db.QueryRow(ctx, query, stripeID).Scan(
+		&price.ID,
+		&price.ProductID,
+		&price.StripePriceID,
+		&price.Weight,
+		&price.Grind,
+		&price.Price,
+		&price.IsDefault,
+		&price.Active,
+		&price.CreatedAt,
+		&price.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("price not found: %w", err)
+		}
+		return nil, fmt.Errorf("failed to get price by Stripe ID: %w", err)
 	}
 
 	return price, nil

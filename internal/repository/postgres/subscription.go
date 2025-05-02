@@ -26,7 +26,7 @@ func NewSubscriptionRepository(db *pgxpool.Pool) repository.SubscriptionReposito
 }
 
 // Create adds a new subscription to the database
-func (r *SubscriptionRepository) Create(ctx context.Context, subscription *domain.Subscription) error {
+func (r *SubscriptionRepository) Create(ctx context.Context, subscription *models.Subscription) error {
 	query := `
 		INSERT INTO subscriptions (
 			stripe_subscription_id, customer_id, price_id, status,
@@ -57,7 +57,7 @@ func (r *SubscriptionRepository) Create(ctx context.Context, subscription *domai
 }
 
 // GetByID retrieves a subscription by its ID
-func (r *SubscriptionRepository) GetByID(ctx context.Context, id int64) (*domain.Subscription, error) {
+func (r *SubscriptionRepository) GetByID(ctx context.Context, id int64) (*models.Subscription, error) {
 	query := `
 		SELECT id, stripe_subscription_id, customer_id, price_id, status,
 		       current_period_start, current_period_end, cancel_at_period_end,
@@ -66,7 +66,7 @@ func (r *SubscriptionRepository) GetByID(ctx context.Context, id int64) (*domain
 		WHERE id = $1
 	`
 
-	subscription := &domain.Subscription{}
+	subscription := &models.Subscription{}
 	var currentPeriodStartNull, currentPeriodEndNull, canceledAtNull pgtype.Time
 
 	err := r.db.QueryRow(ctx, query, id).Scan(
@@ -110,7 +110,7 @@ func (r *SubscriptionRepository) GetByID(ctx context.Context, id int64) (*domain
 }
 
 // GetByStripeID retrieves a subscription by its Stripe ID
-func (r *SubscriptionRepository) GetByStripeID(ctx context.Context, stripeSubscriptionID string) (*domain.Subscription, error) {
+func (r *SubscriptionRepository) GetByStripeID(ctx context.Context, stripeSubscriptionID string) (*models.Subscription, error) {
 	query := `
 		SELECT id, stripe_subscription_id, customer_id, price_id, status,
 		       current_period_start, current_period_end, cancel_at_period_end,
@@ -119,7 +119,7 @@ func (r *SubscriptionRepository) GetByStripeID(ctx context.Context, stripeSubscr
 		WHERE stripe_subscription_id = $1
 	`
 
-	subscription := &domain.Subscription{}
+	subscription := &models.Subscription{}
 	var currentPeriodStartNull, currentPeriodEndNull, canceledAtNull pgtype.Time
 
 	err := r.db.QueryRow(ctx, query, stripeSubscriptionID).Scan(
@@ -163,7 +163,7 @@ func (r *SubscriptionRepository) GetByStripeID(ctx context.Context, stripeSubscr
 }
 
 // ListByCustomerID retrieves all subscriptions for a customer
-func (r *SubscriptionRepository) ListByCustomerID(ctx context.Context, customerID int64) ([]*domain.Subscription, error) {
+func (r *SubscriptionRepository) ListByCustomerID(ctx context.Context, customerID int64) ([]*models.Subscription, error) {
 	query := `
 		SELECT id, stripe_subscription_id, customer_id, price_id, status,
 		       current_period_start, current_period_end, cancel_at_period_end,
@@ -179,9 +179,9 @@ func (r *SubscriptionRepository) ListByCustomerID(ctx context.Context, customerI
 	}
 	defer rows.Close()
 
-	subscriptions := []*domain.Subscription{}
+	subscriptions := []*models.Subscription{}
 	for rows.Next() {
-		subscription := &domain.Subscription{}
+		subscription := &models.Subscription{}
 		var currentPeriodStartNull, currentPeriodEndNull, canceledAtNull pgtype.Time
 
 		err := rows.Scan(
@@ -228,7 +228,7 @@ func (r *SubscriptionRepository) ListByCustomerID(ctx context.Context, customerI
 }
 
 // ListByStatus retrieves all subscriptions with a given status
-func (r *SubscriptionRepository) ListByStatus(ctx context.Context, status string) ([]*domain.Subscription, error) {
+func (r *SubscriptionRepository) ListByStatus(ctx context.Context, status string) ([]*models.Subscription, error) {
 	query := `
 		SELECT id, stripe_subscription_id, customer_id, price_id, status,
 		       current_period_start, current_period_end, cancel_at_period_end,
@@ -244,9 +244,9 @@ func (r *SubscriptionRepository) ListByStatus(ctx context.Context, status string
 	}
 	defer rows.Close()
 
-	subscriptions := []*domain.Subscription{}
+	subscriptions := []*models.Subscription{}
 	for rows.Next() {
-		subscription := &domain.Subscription{}
+		subscription := &models.Subscription{}
 		var currentPeriodStartNull, currentPeriodEndNull, canceledAtNull pgtype.Time
 
 		err := rows.Scan(
@@ -293,7 +293,7 @@ func (r *SubscriptionRepository) ListByStatus(ctx context.Context, status string
 }
 
 // Update updates an existing subscription
-func (r *SubscriptionRepository) Update(ctx context.Context, subscription *domain.Subscription) error {
+func (r *SubscriptionRepository) Update(ctx context.Context, subscription *models.Subscription) error {
 	query := `
 		UPDATE subscriptions
 		SET stripe_subscription_id = $1, customer_id = $2, price_id = $3, status = $4,
@@ -330,7 +330,7 @@ func (r *SubscriptionRepository) Update(ctx context.Context, subscription *domai
 }
 
 // GetWithDetails retrieves a subscription with product and price details
-func (r *SubscriptionRepository) GetWithDetails(ctx context.Context, id int64) (*domain.Subscription, error) {
+func (r *SubscriptionRepository) GetWithDetails(ctx context.Context, id int64) (*models.Subscription, error) {
 	query := `
 		SELECT s.id, s.stripe_subscription_id, s.customer_id, s.price_id, s.status,
 		       s.current_period_start, s.current_period_end, s.cancel_at_period_end,
@@ -348,10 +348,10 @@ func (r *SubscriptionRepository) GetWithDetails(ctx context.Context, id int64) (
 		WHERE s.id = $1
 	`
 
-	subscription := &domain.Subscription{}
-	price := &domain.ProductPrice{}
-	product := &domain.Product{}
-	customer := &domain.Customer{}
+	subscription := &models.Subscription{}
+	price := &models.ProductPrice{}
+	product := &models.Product{}
+	customer := &models.Customer{}
 
 	var currentPeriodStartNull, currentPeriodEndNull, canceledAtNull pgtype.Time
 	var descriptionNull, originNull, roastLevelNull pgtype.Text
@@ -442,7 +442,7 @@ func (r *SubscriptionRepository) GetWithDetails(ctx context.Context, id int64) (
 }
 
 // ListActiveWithDetails retrieves all active subscriptions with details
-func (r *SubscriptionRepository) ListActiveWithDetails(ctx context.Context) ([]*domain.Subscription, error) {
+func (r *SubscriptionRepository) ListActiveWithDetails(ctx context.Context) ([]*models.Subscription, error) {
 	query := `
 		SELECT s.id, s.stripe_subscription_id, s.customer_id, s.price_id, s.status,
 		       s.current_period_start, s.current_period_end, s.cancel_at_period_end,
@@ -467,12 +467,12 @@ func (r *SubscriptionRepository) ListActiveWithDetails(ctx context.Context) ([]*
 	}
 	defer rows.Close()
 
-	subscriptions := []*domain.Subscription{}
+	subscriptions := []*models.Subscription{}
 	for rows.Next() {
-		subscription := &domain.Subscription{}
-		price := &domain.ProductPrice{}
-		product := &domain.Product{}
-		customer := &domain.Customer{}
+		subscription := &models.Subscription{}
+		price := &models.ProductPrice{}
+		product := &models.Product{}
+		customer := &models.Customer{}
 
 		var currentPeriodStartNull, currentPeriodEndNull, canceledAtNull pgtype.Time
 		var descriptionNull, originNull, roastLevelNull pgtype.Text

@@ -7,7 +7,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/spf13/viper v1.20.1
-	github.com/stripe/stripe-go v70.15.0+incompatible
+	github.com/stripe/stripe-go/v72 v72.122.0
 )
 
 require (

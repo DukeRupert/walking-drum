@@ -24,7 +24,7 @@ func NewWebhookEventRepository(db *pgxpool.Pool) repository.WebhookEventReposito
 }
 
 // Create adds a new webhook event to the database
-func (r *WebhookEventRepository) Create(ctx context.Context, event *domain.WebhookEvent) error {
+func (r *WebhookEventRepository) Create(ctx context.Context, event *models.WebhookEvent) error {
 	query := `
 		INSERT INTO webhook_events (
 			stripe_event_id, type, object, processed
@@ -50,14 +50,14 @@ func (r *WebhookEventRepository) Create(ctx context.Context, event *domain.Webho
 }
 
 // GetByStripeID retrieves a webhook event by its Stripe ID
-func (r *WebhookEventRepository) GetByStripeID(ctx context.Context, stripeEventID string) (*domain.WebhookEvent, error) {
+func (r *WebhookEventRepository) GetByStripeID(ctx context.Context, stripeEventID string) (*models.WebhookEvent, error) {
 	query := `
 		SELECT id, stripe_event_id, type, object, processed, created_at
 		FROM webhook_events
 		WHERE stripe_event_id = $1
 	`
 
-	event := &domain.WebhookEvent{}
+	event := &models.WebhookEvent{}
 	err := r.db.QueryRow(ctx, query, stripeEventID).Scan(
 		&event.ID,
 		&event.StripeEventID,
@@ -98,7 +98,7 @@ func (r *WebhookEventRepository) MarkAsProcessed(ctx context.Context, id int64) 
 }
 
 // ListUnprocessed retrieves all unprocessed webhook events
-func (r *WebhookEventRepository) ListUnprocessed(ctx context.Context) ([]*domain.WebhookEvent, error) {
+func (r *WebhookEventRepository) ListUnprocessed(ctx context.Context) ([]*models.WebhookEvent, error) {
 	query := `
 		SELECT id, stripe_event_id, type, object, processed, created_at
 		FROM webhook_events
@@ -112,9 +112,9 @@ func (r *WebhookEventRepository) ListUnprocessed(ctx context.Context) ([]*domain
 	}
 	defer rows.Close()
 
-	events := []*domain.WebhookEvent{}
+	events := []*models.WebhookEvent{}
 	for rows.Next() {
-		event := &domain.WebhookEvent{}
+		event := &models.WebhookEvent{}
 		err := rows.Scan(
 			&event.ID,
 			&event.StripeEventID,
