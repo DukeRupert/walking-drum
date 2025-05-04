@@ -5,6 +5,7 @@ go 1.23.8
 require (
 	github.com/chaindead/zerocfg v0.1.3
 	github.com/golang-migrate/migrate/v4 v4.18.3
+	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/lib/pq v1.10.9
 	github.com/rs/zerolog v1.34.0
