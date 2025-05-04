@@ -1,15 +1,34 @@
-version: '3.8'
-
-volumes:
-  postgres-data:
+version: '3'
 
 services:
-  db:
-    image: postgres:latest
-    restart: unless-stopped
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    env_file:
-      - .env
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "5432:5432" # Expose PostgreSQL port
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=coffee_subscriptions
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_SSL_MODE=disable
+    volumes:
+      - .:/app
+
+  db:
+    image: postgres:14
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=coffee_subscriptions
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

@@ -1,64 +1,46 @@
-# Walking-Drum
-Simple E-commerce solution offering subscriptions out of the box
+# Coffee Subscription Service
 
-## Mission Statement
-Walking-Drum empowers small businesses with straightforward, affordable e-commerce subscription solutions that travel alongside you on your journey to growth. Like the merchant caravans of old, we provide reliable infrastructure for trade without unnecessary complexity or burden.
+A coffee subscription management system built with Go.
 
-## Product Summary
-Walking-Drum is an intuitive e-commerce platform with built-in subscription capabilities designed specifically for small businesses. While other solutions overwhelm with complexity or drain resources with excessive costs, Walking-Drum provides a streamlined pathway to recurring revenue without technical hurdles.
+## Getting Started
 
-Our platform seamlessly integrates with Stripe to offer custom subscription models out-of-the-box, allowing merchants to focus on their products rather than wrestling with payment systems. With Walking-Drum, setting up subscription services becomes as natural as walking a familiar trade route - steady, reliable, and leading to prosperity.
+1. Clone the repository
+2. Copy `.env.example` to `.env` and update the configuration
+3. Run `docker-compose up` to start the development environment
 
-Key features include:
-- Customizable subscription tiers
-- Automated billing management
-- Customer subscription portals
-- Transparent pricing that respects the budgets of growing businesses
+## Project Structure
 
-## Development Roadmap
+The project follows a clean architecture approach with the following main components:
 
-## Phase 1: Foundation & Database Setup
-- [x] Define database schema for core entities (Users, Products, Orders, Subscriptions)
-- [x] Create PostgreSQL migrations for initial schema
-- [x] Set up database connection handling in Golang
-- [x] Implement basic data models in Go
-- [x] Create database seeding for development environment
+- `cmd/api`: Application entry point
+- `internal/api`: HTTP server setup
+- `internal/config`: Configuration management
+- `internal/domain`: Domain models and DTOs
+- `internal/handlers`: HTTP request handlers
+- `internal/middleware`: HTTP middleware
+- `internal/repositories`: Data access layer
+- `internal/services`: Business logic
+- `internal/stripe`: Stripe integration
+- `migrations`: Database migration files
+- `pkg`: Reusable packages
+- `scripts`: Utility scripts
 
-## Phase 2: Core Backend Features
-- [ ] Implement user authentication and authorization
-- [ ] Develop CRUD operations for all core entities
-- [ ] Create subscription plan management
-- [ ] Implement Stripe integration for payment processing
-- [ ] Develop subscription lifecycle management (create, update, cancel)
-- [ ] Build invoice and payment history functionality
+## Development
 
-## Phase 3: API Layer & Business Logic
-- [ ] Design and implement RESTful API endpoints
-- [ ] Create middleware for authentication, logging, error handling
-- [ ] Implement business logic for subscription billing cycles
-- [ ] Develop webhook handlers for Stripe events
-- [ ] Build email notification system for subscription events
-- [ ] Implement subscription analytics and reporting
+To run the application locally:
 
-## Phase 4: Frontend & User Experience
-- [ ] Design and implement merchant admin dashboard
-- [ ] Create customer-facing subscription management portal
-- [ ] Develop product catalog and shopping cart
-- [ ] Implement checkout process with subscription options
-- [ ] Build account management features for customers
-- [ ] Create responsive design for mobile compatibility
+```bash
+go run cmd/api/main.go
+```
 
-## Phase 5: Testing & Optimization
-- [ ] Write unit tests for core functionality
-- [ ] Implement integration tests for critical paths
-- [ ] Perform security audit and penetration testing
-- [ ] Optimize database queries and performance
-- [ ] Load testing and scaling considerations
+To build the application:
 
-## Phase 6: Deployment & Operations
-- [ ] Set up CI/CD pipeline
-- [ ] Configure staging and production environments
-- [ ] Implement logging and monitoring
-- [ ] Create backup and disaster recovery procedures
-- [ ] Document API and system architecture
-- [ ] Prepare user documentation and guides
+```bash
+go build -o coffee-subscription ./cmd/api
+```
+
+To run database migrations:
+
+```bash
+./scripts/db/migrate.sh
+```
