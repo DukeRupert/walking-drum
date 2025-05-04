@@ -50,13 +50,14 @@ type AppConfig struct {
 
 // DBConfig holds database configuration
 type DBConfig struct {
-	Host     string
-	Port     uint
-	Name     string
-	User     string
-	Password string
-	SslMode  string
-	DSN      string // Connection string
+	Host       string
+	Port       uint
+	Name       string
+	User       string
+	Password   string
+	SslMode    string
+	DSN        string // Connection string
+	MigrateURL string // Connection URL for golang-migrate
 }
 
 // StripeConfig holds Stripe API configuration
@@ -111,6 +112,12 @@ func Load() (*Config, error) {
 	cfg.DB.DSN = fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, cfg.DB.SslMode,
+	)
+
+	// Construct URL-formatted connection string for golang-migrate
+	cfg.DB.MigrateURL = fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name, cfg.DB.SslMode,
 	)
 
 	return cfg, nil
