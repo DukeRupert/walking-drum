@@ -20,7 +20,6 @@ type Server struct {
 	productHandler    *handlers.ProductHandler
 	priceHandler      *handlers.PriceHandler
 	customerHandler   *handlers.CustomerHandler
-	addressHandler    *handlers.AddressHandler
 	subscriptionHandler *handlers.SubscriptionHandler
 }
 
@@ -31,7 +30,6 @@ func NewServer(
 	productHandler *handlers.ProductHandler,
 	priceHandler *handlers.PriceHandler,
 	customerHandler *handlers.CustomerHandler,
-	addressHandler *handlers.AddressHandler,
 	subscriptionHandler *handlers.SubscriptionHandler,
 ) *Server {
 	e := echo.New()
@@ -53,7 +51,6 @@ func NewServer(
 		productHandler:    productHandler,
 		priceHandler:      priceHandler,
 		customerHandler:   customerHandler,
-		addressHandler:    addressHandler,
 		subscriptionHandler: subscriptionHandler,
 	}
 	
@@ -94,16 +91,6 @@ func (s *Server) setupRoutes() {
 	customers.GET("/email/:email", s.customerHandler.GetByEmail)
 	customers.PUT("/:id", s.customerHandler.Update)
 	customers.DELETE("/:id", s.customerHandler.Delete)
-	
-	// Address routes
-	customers.POST("/:customerId/addresses", s.addressHandler.Create)
-	customers.GET("/:customerId/addresses", s.addressHandler.ListByCustomer)
-	customers.GET("/:customerId/addresses/default", s.addressHandler.GetDefault)
-	addresses := api.Group("/addresses")
-	addresses.GET("/:id", s.addressHandler.Get)
-	addresses.PUT("/:id", s.addressHandler.Update)
-	addresses.DELETE("/:id", s.addressHandler.Delete)
-	addresses.PUT("/:id/default", s.addressHandler.SetDefault)
 	
 	// Subscription routes
 	subscriptions := api.Group("/subscriptions")

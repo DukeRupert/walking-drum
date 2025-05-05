@@ -18,6 +18,14 @@ func NewSubscriptionHandler(subscriptionService services.SubscriptionService) *S
 	}
 }
 
+// Create handles GET /api/subscriptions
+func (h *SubscriptionHandler) List(c echo.Context) error {
+	// TODO: Implement subscription retrieval
+	// 1. Call subscriptionService.List
+	// 2. Return appropriate response
+	return nil
+}
+
 // Create handles POST /api/subscriptions
 func (h *SubscriptionHandler) Create(c echo.Context) error {
 	// TODO: Implement subscription creation
