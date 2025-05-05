@@ -57,6 +57,9 @@ func main() {
 
 	log.Info().Msg("Database migrations complete")
 
+	// Initialize repositories
+	_ = postgres.NewRepositories(db)
+
 	// Initialize server
 	server := api.NewServer(cfg, db)
 

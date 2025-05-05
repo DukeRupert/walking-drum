@@ -15,11 +15,11 @@ import (
 
 // SubscriptionRepository implements the interfaces.SubscriptionRepository interface
 type SubscriptionRepository struct {
-	db *sql.DB
+	db *DB
 }
 
 // NewSubscriptionRepository creates a new SubscriptionRepository
-func NewSubscriptionRepository(db *sql.DB) interfaces.SubscriptionRepository {
+func NewSubscriptionRepository(db *DB) interfaces.SubscriptionRepository {
 	return &SubscriptionRepository{
 		db: db,
 	}

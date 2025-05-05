@@ -15,11 +15,11 @@ import (
 
 // CustomerRepository implements the interfaces.CustomerRepository interface
 type CustomerRepository struct {
-	db *sql.DB
+	db *DB
 }
 
 // NewCustomerRepository creates a new CustomerRepository
-func NewCustomerRepository(db *sql.DB) interfaces.CustomerRepository {
+func NewCustomerRepository(db *DB) interfaces.CustomerRepository {
 	return &CustomerRepository{
 		db: db,
 	}

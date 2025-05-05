@@ -15,11 +15,11 @@ import (
 
 // ProductRepository implements the interfaces.ProductRepository interface
 type ProductRepository struct {
-	db *sql.DB
+	db *DB
 }
 
 // NewProductRepository creates a new ProductRepository
-func NewProductRepository(db *sql.DB) interfaces.ProductRepository {
+func NewProductRepository(db *DB) interfaces.ProductRepository {
 	return &ProductRepository{
 		db: db,
 	}
@@ -47,6 +47,7 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 		)
 	`
 
+	// Access the underlying *sql.DB through our custom DB type
 	_, err := r.db.ExecContext(
 		ctx,
 		query,

@@ -15,11 +15,11 @@ import (
 
 // PriceRepository implements the interfaces.PriceRepository interface
 type PriceRepository struct {
-	db *sql.DB
+	db *DB
 }
 
 // NewPriceRepository creates a new PriceRepository
-func NewPriceRepository(db *sql.DB) interfaces.PriceRepository {
+func NewPriceRepository(db *DB) interfaces.PriceRepository {
 	return &PriceRepository{
 		db: db,
 	}

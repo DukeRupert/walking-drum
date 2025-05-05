@@ -53,3 +53,4 @@ type SubscriptionRepository interface {
 	// GetWithRelatedData retrieves a subscription with its related product, price, customer and address data
 	GetWithRelatedData(ctx context.Context, id uuid.UUID) (*models.Subscription, *models.Product, *models.Price, *models.Customer, *models.Address, error)
 }
+

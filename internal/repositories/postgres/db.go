@@ -11,11 +11,6 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-// DB represents a PostgreSQL database connection pool
-type DB struct {
-	*sql.DB
-}
-
 // Connect establishes a connection to the PostgreSQL database
 func Connect(dbConfig config.DBConfig) (*DB, error) {
 	// Create the database connection
