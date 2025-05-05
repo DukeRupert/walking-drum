@@ -40,8 +40,6 @@ func NewServer(cfg *config.Config, db *postgres.DB) *Server {
 	}
 
 	// Setup router
-	setupRouter(server)
-
 	return server
 }
 

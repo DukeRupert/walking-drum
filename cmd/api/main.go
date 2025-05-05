@@ -2,10 +2,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
+	"sync"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -21,11 +24,9 @@ import (
 func init() {
 	// UNIX Time is faster and smaller than most timestamps
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-
-	log.Print("hello world")
 }
 
-func main() {
+func run(ctx context.Context, args []string, w io.Writer) error {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -63,21 +64,44 @@ func main() {
 	// Initialize server
 	server := api.NewServer(cfg, db)
 
-	// Start server in a goroutine
+	// Start the server in a goroutine
+	serverErrors := make(chan error, 1)
 	go func() {
-		if err := server.Start(); err != nil {
-			log.Printf("Server stopped: %v", err)
-		}
+		log.Info().Uint("port", cfg.App.Port).Msg("Server listening on: ")
+		serverErrors <- server.Start()
 	}()
 
-	// Handle graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	// Wait for shutdown signal or server error
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case err := <-serverErrors:
+			if err != nil && err != http.ErrServerClosed {
+				fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+			}
+		case <-ctx.Done():
+			// Shutdown the server gracefully
+			if err := server.Shutdown(); err != nil {
+				fmt.Fprintf(os.Stderr, "server shutdown error: %v\n", err)
+			}
+		}
+		fmt.Println("Server gracefully stopped")
+	}()
 
-	fmt.Println("Shutting down server...")
-	if err := server.Shutdown(); err != nil {
-		log.Fatal().Err(err).Msg("Server shutdown failed")
+	wg.Wait()
+	return nil
+}
+
+func main() {
+	// Setup context with signal handling
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	// Run the application
+	if err := run(ctx, os.Args, os.Stdout); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
 	}
-	fmt.Println("Server gracefully stopped")
 }
