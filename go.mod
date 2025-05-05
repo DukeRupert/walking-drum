@@ -9,6 +9,7 @@ require (
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/lib/pq v1.10.9
 	github.com/rs/zerolog v1.34.0
+	github.com/stripe/stripe-go/v74 v74.30.0
 )
 
 require (
