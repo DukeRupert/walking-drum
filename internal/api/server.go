@@ -15,13 +15,13 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	echo              *echo.Echo
-	config            *config.Config
-	db                *postgres.DB
-	logger						*zerolog.Logger
-	productHandler    *handlers.ProductHandler
-	priceHandler      *handlers.PriceHandler
-	customerHandler   *handlers.CustomerHandler
+	echo                *echo.Echo
+	config              *config.Config
+	db                  *postgres.DB
+	logger              *zerolog.Logger
+	productHandler      *handlers.ProductHandler
+	priceHandler        *handlers.PriceHandler
+	customerHandler     *handlers.CustomerHandler
 	subscriptionHandler *handlers.SubscriptionHandler
 }
 
@@ -36,41 +36,39 @@ func NewServer(
 	subscriptionHandler *handlers.SubscriptionHandler,
 ) *Server {
 	e := echo.New()
-	
+
 	// Set server properties
 	e.HideBanner = true
 	e.Debug = cfg.App.Debug
-	
+
 	// Add middleware
-e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-	LogURI:    true,
-	LogStatus: true,
-	LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-		logger.Info().
-			Str("URI", v.URI).
-			Int("status", v.Status).
-			Msg("request")
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogURI:    true,
+		LogStatus: true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			logger.Info().
+				Str("URI", v.URI).
+				Int("status", v.Status).
+				Msg("request")
 
-		return nil
-	},
-}))
-	
+			return nil
+		},
+	}))
 
-	
 	// Create server
 	server := &Server{
-		echo:              e,
-		config:            cfg,
-		db:                db,
-		productHandler:    productHandler,
-		priceHandler:      priceHandler,
-		customerHandler:   customerHandler,
+		echo:                e,
+		config:              cfg,
+		db:                  db,
+		productHandler:      productHandler,
+		priceHandler:        priceHandler,
+		customerHandler:     customerHandler,
 		subscriptionHandler: subscriptionHandler,
 	}
-	
+
 	// Setup router
 	server.setupRoutes()
-	
+
 	return server
 }
 

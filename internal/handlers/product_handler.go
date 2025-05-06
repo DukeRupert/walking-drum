@@ -2,7 +2,10 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/dukerupert/walking-drum/internal/services"
+	"github.com/dukerupert/walking-drum/pkg/pagination"
 	"github.com/labstack/echo/v4"
 )
 
@@ -40,10 +43,28 @@ func (h *ProductHandler) Get(c echo.Context) error {
 // List handles GET /api/products
 func (h *ProductHandler) List(c echo.Context) error {
 	// TODO: Implement product listing with pagination
+	ctx := c.Request().Context()
+
 	// 1. Parse pagination parameters
+	params := pagination.NewParams(c)
+
+	// Parse additional filtering parameters
+	includeInactive := false
+	if c.QueryParam("include_inactive") == "true" {
+		// todo: Only admins to see inactive products
+		includeInactive = true
+	}
+
 	// 2. Call productService.List
+	products, total, err := h.productService.List(ctx, params.Offset, params.PerPage, includeInactive)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve products")
+	}
+
 	// 3. Return paginated response
-	return nil
+	meta := pagination.NewMeta(params, total)
+	response := pagination.Response(products, meta)
+	return c.JSON(http.StatusOK, response)
 }
 
 // Update handles PUT /api/products/:id
