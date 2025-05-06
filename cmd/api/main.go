@@ -83,17 +83,18 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	productHandler := handlers.NewProductHandler(productService)
 	priceHandler := handlers.NewPriceHandler(priceService)
 	customerHandler := handlers.NewCustomerHandler(customerService)
-	addressHandler := handlers.NewAddressHandler(customerService)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
 	
+	// Initialize logger
+ logger := zerolog.New(os.Stdout)
 	// Initialize server with handlers
 	server := api.NewServer(
 		cfg,
 		db,
+		&logger,
 		productHandler,
 		priceHandler,
 		customerHandler,
-		addressHandler,
 		subscriptionHandler,
 	)
 	

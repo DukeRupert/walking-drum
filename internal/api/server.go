@@ -10,6 +10,7 @@ import (
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/rs/zerolog"
 )
 
 // Server represents the HTTP server
@@ -17,6 +18,7 @@ type Server struct {
 	echo              *echo.Echo
 	config            *config.Config
 	db                *postgres.DB
+	logger						*zerolog.Logger
 	productHandler    *handlers.ProductHandler
 	priceHandler      *handlers.PriceHandler
 	customerHandler   *handlers.CustomerHandler
@@ -27,6 +29,7 @@ type Server struct {
 func NewServer(
 	cfg *config.Config,
 	db *postgres.DB,
+	logger *zerolog.Logger,
 	productHandler *handlers.ProductHandler,
 	priceHandler *handlers.PriceHandler,
 	customerHandler *handlers.CustomerHandler,
@@ -39,9 +42,20 @@ func NewServer(
 	e.Debug = cfg.App.Debug
 	
 	// Add middleware
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
+e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+	LogURI:    true,
+	LogStatus: true,
+	LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+		logger.Info().
+			Str("URI", v.URI).
+			Int("status", v.Status).
+			Msg("request")
+
+		return nil
+	},
+}))
+	
+
 	
 	// Create server
 	server := &Server{
