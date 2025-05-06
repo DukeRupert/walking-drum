@@ -3,9 +3,13 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
+	"github.com/dukerupert/walking-drum/internal/domain/dto"
+	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/dukerupert/walking-drum/pkg/pagination"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -24,11 +28,47 @@ func NewProductHandler(productService services.ProductService) *ProductHandler {
 // Create handles POST /api/products
 func (h *ProductHandler) Create(c echo.Context) error {
 	// TODO: Implement product creation
+	ctx := c.Request().Context()
 	// 1. Bind request to ProductCreateDTO
+	var req dto.ProductCreateDTO
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+	}
 	// 2. Validate DTO
-	// 3. Call productService.Create
-	// 4. Return appropriate response
-	return nil
+	if err := c.Validate(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	// 3. Create product model from DTO
+	product := &models.Product{
+		ID:          uuid.New(),
+		Name:        req.Name,
+		Description: req.Description,
+		ImageURL:    req.ImageURL,
+		Active:      req.Active,
+		StockLevel:  req.StockLevel,
+		Weight:      req.Weight,
+		Origin:      req.Origin,
+		RoastLevel:  req.RoastLevel,
+		FlavorNotes: req.FlavorNotes,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	// 4. Call productService.Create
+	if err := h.productService.Create(ctx, product); err != nil {
+		h.logger.Error().Err(err).
+			Str("product_id", product.ID.String()).
+			Str("product_name", product.Name).
+			Msg("Failed to create product")
+
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create product")
+	}
+	// 5. Return appropriate response
+	h.logger.Info().
+		Str("product_id", product.ID.String()).
+		Str("product_name", product.Name).
+		Msg("Product created successfully")
+
+	return c.JSON(http.StatusCreated, product)
 }
 
 // Get handles GET /api/products/:id
