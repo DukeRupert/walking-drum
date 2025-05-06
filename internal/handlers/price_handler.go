@@ -37,6 +37,15 @@ func (h *PriceHandler) Get(c echo.Context) error {
 	return nil
 }
 
+// Get handles GET /api/prices/product/:productId
+func (h *PriceHandler) ListByProduct(c echo.Context) error {
+	// TODO: Implement price retrieval by productID
+	// 1. Parse ID from URL
+	// 2. Call priceService.GetByProductID
+	// 3. Return appropriate response
+	return nil
+}
+
 // List handles GET /api/prices
 func (h *PriceHandler) List(c echo.Context) error {
 	// TODO: Implement price listing with pagination
