@@ -8,6 +8,7 @@ import (
 	"github.com/dukerupert/walking-drum/internal/config"
 	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
 	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/rs/zerolog"
 )
 
 // DB represents a PostgreSQL database connection pool
@@ -58,9 +59,10 @@ func NewDB(cfg *config.Config) (*DB, error) {
 }
 
 // NewRepositories initializes all repositories
-func NewRepositories(db *DB) *Repositories {
+func NewRepositories(db *DB, logger *zerolog.Logger) *Repositories {
+	sublogger := logger.With().Str("component", "repository").Logger()
 	return &Repositories{
-		Product:      NewProductRepository(db),
+		Product:      NewProductRepository(db, sublogger),
 		Price:        NewPriceRepository(db),
 		Customer:     NewCustomerRepository(db),
 		Subscription: NewSubscriptionRepository(db),

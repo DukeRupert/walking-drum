@@ -4,8 +4,8 @@ package stripe
 import (
 	"context"
 
-	"github.com/stripe/stripe-go/v74"
-	"github.com/stripe/stripe-go/v74/webhook"
+	"github.com/stripe/stripe-go/v82"
+	"github.com/stripe/stripe-go/v82/webhook"
 )
 
 // ProcessWebhook handles incoming webhook events from Stripe
@@ -16,11 +16,11 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		c.logger.Error().Err(err).Msg("Failed to verify webhook signature")
 		return err
 	}
-	
-	c.logger.Info().Str("event_type", event.Type).Str("event_id", event.ID).Msg("Received stripe webhook event")
-	
+
+	c.logger.Info().Str("event_type", string(event.Type)).Str("event_id", event.ID).Msg("Received stripe webhook event")
+
 	// Handle different event types
-	switch event.Type {
+	switch string(event.Type) {
 	// Charge events
 	case "charge.captured":
 		return c.handleChargeEvent(ctx, event)
@@ -36,7 +36,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleChargeEvent(ctx, event)
 	case "charge.updated":
 		return c.handleChargeEvent(ctx, event)
-		
+
 	// Charge dispute events
 	case "charge.dispute.closed":
 		return c.handleChargeDisputeEvent(ctx, event)
@@ -50,7 +50,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleChargeDisputeEvent(ctx, event)
 	case "charge.refund.updated":
 		return c.handleChargeRefundEvent(ctx, event)
-		
+
 	// Checkout session events
 	case "checkout.session.async_payment_failed":
 		return c.handleCheckoutSessionEvent(ctx, event)
@@ -60,7 +60,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleCheckoutSessionEvent(ctx, event)
 	case "checkout.session.expired":
 		return c.handleCheckoutSessionEvent(ctx, event)
-		
+
 	// Customer events
 	case "customer.created":
 		return c.handleCustomerEvent(ctx, event)
@@ -68,7 +68,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleCustomerEvent(ctx, event)
 	case "customer.updated":
 		return c.handleCustomerEvent(ctx, event)
-		
+
 	// Customer discount events
 	case "customer.discount.created":
 		return c.handleCustomerDiscountEvent(ctx, event)
@@ -76,7 +76,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleCustomerDiscountEvent(ctx, event)
 	case "customer.discount.updated":
 		return c.handleCustomerDiscountEvent(ctx, event)
-		
+
 	// Customer source events
 	case "customer.source.created":
 		return c.handleCustomerSourceEvent(ctx, event)
@@ -86,7 +86,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleCustomerSourceEvent(ctx, event)
 	case "customer.source.updated":
 		return c.handleCustomerSourceEvent(ctx, event)
-		
+
 	// Customer subscription events - most important for your coffee subscription system
 	case "customer.subscription.created":
 		return c.handleSubscriptionCreated(ctx, event)
@@ -104,7 +104,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleSubscriptionEvent(ctx, event)
 	case "customer.subscription.updated":
 		return c.handleSubscriptionUpdated(ctx, event)
-		
+
 	// Customer tax ID events
 	case "customer.tax_id.created":
 		return c.handleCustomerTaxIdEvent(ctx, event)
@@ -112,7 +112,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleCustomerTaxIdEvent(ctx, event)
 	case "customer.tax_id.updated":
 		return c.handleCustomerTaxIdEvent(ctx, event)
-		
+
 	// Identity verification events
 	case "identity.verification_session.canceled":
 		return c.handleIdentityVerificationEvent(ctx, event)
@@ -126,7 +126,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleIdentityVerificationEvent(ctx, event)
 	case "identity.verification_session.verified":
 		return c.handleIdentityVerificationEvent(ctx, event)
-		
+
 	// Invoice events
 	case "invoice.created":
 		return c.handleInvoiceEvent(ctx, event)
@@ -160,7 +160,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleInvoiceEvent(ctx, event)
 	case "invoice.will_be_due":
 		return c.handleInvoiceEvent(ctx, event)
-		
+
 	// Payment intent events
 	case "payment_intent.amount_capturable_updated":
 		return c.handlePaymentIntentEvent(ctx, event)
@@ -178,7 +178,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handlePaymentIntentEvent(ctx, event)
 	case "payment_intent.succeeded":
 		return c.handlePaymentIntentEvent(ctx, event)
-		
+
 	// Payment method events
 	case "payment_method.attached":
 		return c.handlePaymentMethodEvent(ctx, event)
@@ -188,7 +188,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handlePaymentMethodEvent(ctx, event)
 	case "payment_method.updated":
 		return c.handlePaymentMethodEvent(ctx, event)
-		
+
 	// Plan events
 	case "plan.created":
 		return c.handlePlanEvent(ctx, event)
@@ -196,7 +196,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handlePlanEvent(ctx, event)
 	case "plan.updated":
 		return c.handlePlanEvent(ctx, event)
-		
+
 	// Price events
 	case "price.created":
 		return c.handlePriceEvent(ctx, event)
@@ -204,7 +204,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handlePriceEvent(ctx, event)
 	case "price.updated":
 		return c.handlePriceEvent(ctx, event)
-		
+
 	// Product events
 	case "product.created":
 		return c.handleProductEvent(ctx, event)
@@ -212,7 +212,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleProductEvent(ctx, event)
 	case "product.updated":
 		return c.handleProductEvent(ctx, event)
-		
+
 	// Refund events
 	case "refund.created":
 		return c.handleRefundEvent(ctx, event)
@@ -220,7 +220,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleRefundEvent(ctx, event)
 	case "refund.updated":
 		return c.handleRefundEvent(ctx, event)
-		
+
 	// Subscription schedule events
 	case "subscription_schedule.aborted":
 		return c.handleSubscriptionScheduleEvent(ctx, event)
@@ -236,7 +236,7 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleSubscriptionScheduleEvent(ctx, event)
 	case "subscription_schedule.updated":
 		return c.handleSubscriptionScheduleEvent(ctx, event)
-		
+
 	// Tax events
 	case "tax.settings.updated":
 		return c.handleTaxEvent(ctx, event)
@@ -244,9 +244,9 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 		return c.handleTaxRateEvent(ctx, event)
 	case "tax_rate.updated":
 		return c.handleTaxRateEvent(ctx, event)
-		
+
 	default:
-		c.logger.Info().Str("event_type", event.Type).Msg("Unhandled event type")
+		c.logger.Info().Str("event_type", string(string(event.Type))).Msg("Unhandled event type")
 		// Not all events need to be handled, so don't return an error
 		return nil
 	}
@@ -255,61 +255,61 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 // Handler implementations for each event category
 
 func (c *Client) handleChargeEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing charge event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing charge event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleChargeDisputeEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing charge dispute event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing charge dispute event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleChargeRefundEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing charge refund event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing charge refund event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleCheckoutSessionEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing checkout session event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing checkout session event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleCustomerEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing customer event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleCustomerDiscountEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing customer discount event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer discount event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleCustomerSourceEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing customer source event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer source event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleCustomerTaxIdEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing customer tax ID event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer tax ID event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleIdentityVerificationEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing identity verification event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing identity verification event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleInvoiceEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing invoice event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing invoice event")
 	// Implementation details here
 	return nil
 }
@@ -327,116 +327,116 @@ func (c *Client) handleInvoicePaymentFailed(ctx context.Context, event stripe.Ev
 }
 
 func (c *Client) handlePaymentIntentEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing payment intent event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing payment intent event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handlePaymentMethodEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing payment method event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing payment method event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handlePlanEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing plan event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing plan event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handlePriceEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing price event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing price event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleProductEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing product event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing product event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleRefundEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing refund event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing refund event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleSubscriptionEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing subscription event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing subscription event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleSubscriptionCreated(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription created event")
-	
+
 	// Implementation for subscription created
 	// 1. Extract subscription data from event
 	// 2. Update local database with new subscription
 	// 3. Trigger any necessary business logic (e.g., welcome email)
-	
+
 	return nil
 }
 
 func (c *Client) handleSubscriptionUpdated(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription updated event")
-	
+
 	// Implementation for subscription updated
 	// 1. Extract updated subscription data
 	// 2. Update local database
 	// 3. Trigger any necessary business logic
-	
+
 	return nil
 }
 
 func (c *Client) handleSubscriptionDeleted(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription deleted event")
-	
+
 	// Implementation for subscription deleted
 	// 1. Extract subscription ID
 	// 2. Update local database
 	// 3. Trigger any necessary business logic (e.g., cancellation email)
-	
+
 	return nil
 }
 
 func (c *Client) handleSubscriptionPaused(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription paused event")
-	
+
 	// Implementation for subscription paused
 	// 1. Extract subscription data
 	// 2. Update local database
 	// 3. Trigger any necessary business logic
-	
+
 	return nil
 }
 
 func (c *Client) handleSubscriptionResumed(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription resumed event")
-	
+
 	// Implementation for subscription resumed
 	// 1. Extract subscription data
 	// 2. Update local database
 	// 3. Trigger any necessary business logic
-	
+
 	return nil
 }
 
 func (c *Client) handleSubscriptionScheduleEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing subscription schedule event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing subscription schedule event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleTaxEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing tax event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing tax event")
 	// Implementation details here
 	return nil
 }
 
 func (c *Client) handleTaxRateEvent(ctx context.Context, event stripe.Event) error {
-	c.logger.Info().Str("event_id", event.ID).Str("type", event.Type).Msg("Processing tax rate event")
+	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing tax rate event")
 	// Implementation details here
 	return nil
 }

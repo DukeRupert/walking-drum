@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,16 +35,27 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	// Initialize logger
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 
+	debug := flag.Bool("debug", false, "sets log level to debug")
+
+	flag.Parse()
+	// Default level for this example is info, unless debug flag is present
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if *debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	logger.Debug().Msg("This message appears only when log level set to Debug")
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to load configuration")
+		logger.Fatal().Err(err).Msg("Failed to load configuration")
 	}
 
 	// Initialize database
 	db, err := postgres.Connect(cfg.DB)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to database")
+		logger.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 	defer db.Close()
 
@@ -52,11 +64,11 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		"file://migrations",
 		cfg.DB.MigrateURL)
 	if err != nil {
-		log.Fatal().Err(err).Str("migrateURL", cfg.DB.MigrateURL).Msg("Failed to create migration instance")
+		logger.Fatal().Err(err).Str("migrateURL", cfg.DB.MigrateURL).Msg("Failed to create migration instance")
 	}
 
 	// Log migration source and database URL
-	log.Debug().
+	logger.Debug().
 		Str("source", "file://migrations").
 		Str("migrateURL", cfg.DB.MigrateURL).
 		Msg("Migration configuration")
@@ -64,42 +76,42 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	// Get migration version before running
 	version, dirty, vErr := m.Version()
 	if vErr != nil && vErr != migrate.ErrNilVersion {
-		log.Warn().Err(vErr).Msg("Failed to get current migration version")
+		logger.Warn().Err(vErr).Msg("Failed to get current migration version")
 	} else if vErr == migrate.ErrNilVersion {
-		log.Info().Msg("No migrations have been applied yet")
+		logger.Info().Msg("No migrations have been applied yet")
 	} else {
-		log.Info().Uint("version", version).Bool("dirty", dirty).Msg("Current migration version")
+		logger.Info().Uint("version", version).Bool("dirty", dirty).Msg("Current migration version")
 	}
 
 	// Run migrations
 	if err := m.Up(); err != nil {
 		if err == migrate.ErrNoChange {
-			log.Info().Msg("No migration changes detected")
+			logger.Info().Msg("No migration changes detected")
 		} else {
-			log.Error().Err(err).Msg("Migration failed")
+			logger.Error().Err(err).Msg("Migration failed")
 			// Consider whether to exit or continue
 			// log.Fatal().Err(err).Msg("Migration failed, cannot continue")
 		}
 	} else {
 		// Get the new version after successful migration
 		newVersion, _, _ := m.Version()
-		log.Info().Uint("new_version", newVersion).Msg("Database migrations completed successfully")
+		logger.Info().Uint("new_version", newVersion).Msg("Database migrations completed successfully")
 	}
 
 	// Close the migration
 	srcErr, dbErr := m.Close()
 	if srcErr != nil {
-		log.Warn().Err(srcErr).Msg("Error closing migration source")
+		logger.Warn().Err(srcErr).Msg("Error closing migration source")
 	}
 	if dbErr != nil {
-		log.Warn().Err(dbErr).Msg("Error closing migration database connection")
+		logger.Warn().Err(dbErr).Msg("Error closing migration database connection")
 	}
 
 	// Initialize Stripe client
 	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey, logger)
 
 	// Initialize repositories
-	repos := postgres.NewRepositories(db)
+	repos := postgres.NewRepositories(db, &logger)
 
 	// Initialize services
 	productService := services.NewProductService(repos.Product, stripeClient, logger)
@@ -115,7 +127,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	stripeService := stripe.NewClient(cfg.Stripe.SecretKey, logger)
 
 	// Initialize handlers
-	productHandler := handlers.NewProductHandler(productService, logger)
+	productHandler := handlers.NewProductHandler(productService, &logger)
 	priceHandler := handlers.NewPriceHandler(priceService)
 	customerHandler := handlers.NewCustomerHandler(customerService)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)

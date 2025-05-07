@@ -11,17 +11,21 @@ import (
 	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // ProductRepository implements the interfaces.ProductRepository interface
 type ProductRepository struct {
 	db *DB
+	logger zerolog.Logger
 }
 
 // NewProductRepository creates a new ProductRepository
-func NewProductRepository(db *DB) interfaces.ProductRepository {
+func NewProductRepository(db *DB, logger zerolog.Logger) interfaces.ProductRepository {
 	return &ProductRepository{
 		db: db,
+		logger: logger,
 	}
 }
 
@@ -151,6 +155,8 @@ func (r *ProductRepository) GetByStripeID(ctx context.Context, stripeID string) 
 
 // List retrieves all products, with optional filtering
 func (r *ProductRepository) List(ctx context.Context, offset, limit int, includeInactive bool) ([]*models.Product, int, error) {
+	r.logger.Info().Msg("Executing List()")
+
 	whereClause := ""
 	if !includeInactive {
 		whereClause = "WHERE active = true"
@@ -175,8 +181,11 @@ func (r *ProductRepository) List(ctx context.Context, offset, limit int, include
 		return nil, 0, fmt.Errorf("failed to count products: %w", err)
 	}
 
+	log.Debug().Int("total_count", total).Msg("Total record count")
+
 	// If no products, return early
 	if total == 0 {
+		log.Debug().Msg("Total equals 0. Returning early")
 		return []*models.Product{}, 0, nil
 	}
 

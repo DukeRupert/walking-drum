@@ -18,83 +18,143 @@ type ProductHandler struct {
 }
 
 // NewProductHandler creates a new product handler
-func NewProductHandler(productService services.ProductService, logger zerolog.Logger) *ProductHandler {
+func NewProductHandler(productService services.ProductService, logger *zerolog.Logger) *ProductHandler {
+	sublogger := logger.With().Str("component", "product_handler").Logger()
 	return &ProductHandler{
 		productService: productService,
-		logger:         logger.With().Str("component", "product_handler").Logger(),
+		logger:         sublogger,
 	}
 }
 
 // Create handles POST /api/products
 func (h *ProductHandler) Create(c echo.Context) error {
-	// Define the request/response types inline, following Ryer's pattern
-	type request = dto.ProductCreateDTO
-	type response struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		ImageURL    string `json:"image_url"`
-		Active      bool   `json:"active"`
-		StockLevel  int    `json:"stock_level"`
-		Weight      int    `json:"weight"`
-		Origin      string `json:"origin"`
-		RoastLevel  string `json:"roast_level"`
-		FlavorNotes string `json:"flavor_notes"`
-		CreatedAt   string `json:"created_at"`
-		UpdatedAt   string `json:"updated_at"`
-	}
+    // Define the request/response types inline, following Ryer's pattern
+    type request = dto.ProductCreateDTO
+    type response struct {
+        ID          string `json:"id"`
+        Name        string `json:"name"`
+        Description string `json:"description"`
+        ImageURL    string `json:"image_url"`
+        Active      bool   `json:"active"`
+        StockLevel  int    `json:"stock_level"`
+        Weight      int    `json:"weight"`
+        Origin      string `json:"origin"`
+        RoastLevel  string `json:"roast_level"`
+        FlavorNotes string `json:"flavor_notes"`
+        CreatedAt   string `json:"created_at"`
+        UpdatedAt   string `json:"updated_at"`
+    }
 
-	ctx := c.Request().Context()
-	
-	// 1. Bind request
-	var req request
-	if err := c.Bind(&req); err != nil {
-		h.logger.Error().Err(err).Msg("Failed to bind request")
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
-	}
-	
-	// 2. Validate using our validator interface (Mat Ryer style)
-	if problems := req.Valid(ctx); len(problems) > 0 {
-		h.logger.Error().
-			Interface("problems", problems).
-			Msg("Validation failed")
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error":    "Validation failed",
-			"problems": problems,
-		})
-	}
-	
-	// 3. Call service
-	product, err := h.productService.Create(ctx, &req)
-	if err != nil {
-		h.logger.Error().Err(err).
-			Str("product_name", req.Name).
-			Msg("Failed to create product")
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create product")
-	}
-	
-	// 4. Map to response
-	resp := response{
-		ID:          product.ID.String(),
-		Name:        product.Name,
-		Description: product.Description,
-		ImageURL:    product.ImageURL,
-		Active:      product.Active,
-		StockLevel:  product.StockLevel,
-		Weight:      product.Weight,
-		Origin:      product.Origin,
-		RoastLevel:  product.RoastLevel,
-		FlavorNotes: product.FlavorNotes,
-		CreatedAt:   product.CreatedAt.Format(http.TimeFormat),
-		UpdatedAt:   product.UpdatedAt.Format(http.TimeFormat),
-	}
-	
-	h.logger.Info().
-		Str("product_id", product.ID.String()).
-		Str("product_name", product.Name).
-		Msg("Product created successfully")
-	
-	return c.JSON(http.StatusCreated, resp)
+    ctx := c.Request().Context()
+    requestID := c.Response().Header().Get(echo.HeaderXRequestID)
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Create").
+        Str("request_id", requestID).
+        Str("method", c.Request().Method).
+        Str("path", c.Request().URL.Path).
+        Str("remote_addr", c.Request().RemoteAddr).
+        Msg("Handling product creation request")
+    
+    // 1. Bind request
+    var req request
+    if err := c.Bind(&req); err != nil {
+        h.logger.Error().
+            Str("handler", "ProductHandler.Create").
+            Str("request_id", requestID).
+            Err(err).
+            Msg("Failed to bind request body")
+        return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Create").
+        Str("request_id", requestID).
+        Str("product_name", req.Name).
+        Str("description", req.Description).
+        Int("stock_level", req.StockLevel).
+        Int("weight", req.Weight).
+        Str("origin", req.Origin).
+        Str("roast_level", req.RoastLevel).
+        Bool("active", req.Active).
+        Msg("Request body successfully bound")
+    
+    // 2. Validate using our validator interface (Mat Ryer style)
+    if problems := req.Valid(ctx); len(problems) > 0 {
+        h.logger.Error().
+            Str("handler", "ProductHandler.Create").
+            Str("request_id", requestID).
+            Interface("problems", problems).
+            Str("product_name", req.Name).
+            Msg("Product validation failed")
+        return c.JSON(http.StatusBadRequest, map[string]interface{}{
+            "error":    "Validation failed",
+            "problems": problems,
+        })
+    }
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Create").
+        Str("request_id", requestID).
+        Str("product_name", req.Name).
+        Msg("Product validation passed")
+    
+    // 3. Call service
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Create").
+        Str("request_id", requestID).
+        Msg("Calling productService.Create")
+        
+    product, err := h.productService.Create(ctx, &req)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "ProductHandler.Create").
+            Str("request_id", requestID).
+            Err(err).
+            Str("product_name", req.Name).
+            Msg("Service layer failed to create product")
+        return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create product")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Create").
+        Str("request_id", requestID).
+        Str("product_id", product.ID.String()).
+        Str("stripe_id", product.StripeID).
+        Msg("Product successfully created by service layer")
+    
+    // 4. Map to response
+    resp := response{
+        ID:          product.ID.String(),
+        Name:        product.Name,
+        Description: product.Description,
+        ImageURL:    product.ImageURL,
+        Active:      product.Active,
+        StockLevel:  product.StockLevel,
+        Weight:      product.Weight,
+        Origin:      product.Origin,
+        RoastLevel:  product.RoastLevel,
+        FlavorNotes: product.FlavorNotes,
+        CreatedAt:   product.CreatedAt.Format(http.TimeFormat),
+        UpdatedAt:   product.UpdatedAt.Format(http.TimeFormat),
+    }
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Create").
+        Str("request_id", requestID).
+        Str("response_status", http.StatusText(http.StatusCreated)).
+        Msg("Preparing response")
+    
+    h.logger.Info().
+        Str("handler", "ProductHandler.Create").
+        Str("request_id", requestID).
+        Str("product_id", product.ID.String()).
+        Str("product_name", product.Name).
+        Str("stripe_id", product.StripeID).
+        Int("status_code", http.StatusCreated).
+        Msg("Product created successfully")
+    
+    return c.JSON(http.StatusCreated, resp)
 }
 
 // Get handles GET /api/products/:id
@@ -108,29 +168,118 @@ func (h *ProductHandler) Get(c echo.Context) error {
 
 // List handles GET /api/products
 func (h *ProductHandler) List(c echo.Context) error {
-	// TODO: Implement product listing with pagination
-	ctx := c.Request().Context()
+    ctx := c.Request().Context()
+    requestID := c.Response().Header().Get(echo.HeaderXRequestID)
 
-	// 1. Parse pagination parameters
-	params := pagination.NewParams(c)
+    h.logger.Debug().
+        Str("handler", "ProductHandler.List").
+        Str("request_id", requestID).
+        Str("method", c.Request().Method).
+        Str("path", c.Request().URL.Path).
+        Str("remote_addr", c.Request().RemoteAddr).
+        Msg("Handling product listing request")
 
-	// Parse additional filtering parameters
-	includeInactive := false
-	if c.QueryParam("include_inactive") == "true" {
-		// todo: Only admins to see inactive products
-		includeInactive = true
-	}
+    // 1. Parse pagination parameters
+    params := pagination.NewParams(c)
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.List").
+        Str("request_id", requestID).
+        Int("offset", params.Offset).
+        Int("per_page", params.PerPage).
+        Int("page", params.Page).
+        Msg("Pagination parameters parsed")
 
-	// 2. Call productService.List
-	products, total, err := h.productService.List(ctx, params.Offset, params.PerPage, includeInactive)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve products")
-	}
+    // Parse additional filtering parameters
+    includeInactive := false
+    if c.QueryParam("include_inactive") == "true" {
+        // todo: Only admins to see inactive products
+        includeInactive = true
+        h.logger.Debug().
+            Str("handler", "ProductHandler.List").
+            Str("request_id", requestID).
+            Bool("include_inactive", includeInactive).
+            Msg("Including inactive products in results")
+    }
 
-	// 3. Return paginated response
-	meta := pagination.NewMeta(params, total)
-	response := pagination.Response(products, meta)
-	return c.JSON(http.StatusOK, response)
+    h.logger.Debug().
+        Str("handler", "ProductHandler.List").
+        Str("request_id", requestID).
+        Int("offset", params.Offset).
+        Int("per_page", params.PerPage).
+        Bool("include_inactive", includeInactive).
+        Msg("Calling productService.List")
+
+    // 2. Call productService.List
+    products, total, err := h.productService.List(ctx, params.Offset, params.PerPage, includeInactive)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "ProductHandler.List").
+            Str("request_id", requestID).
+            Err(err).
+            Int("offset", params.Offset).
+            Int("per_page", params.PerPage).
+            Bool("include_inactive", includeInactive).
+            Msg("Failed to retrieve products from service")
+        return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve products")
+    }
+
+    h.logger.Debug().
+        Str("handler", "ProductHandler.List").
+        Str("request_id", requestID).
+        Int("products_count", len(products)).
+        Int("total_count", total).
+        Msg("Products retrieved successfully")
+
+    // 3. Return paginated response
+    meta := pagination.NewMeta(params, total)
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.List").
+        Str("request_id", requestID).
+        Int("current_page", meta.Page).
+        Int("total_pages", meta.TotalPages).
+        Int("per_page", meta.PerPage).
+        Int("total", meta.Total).
+        Msg("Pagination metadata generated")
+
+    response := pagination.Response(products, meta)
+    
+    // Log product IDs for easier debugging (limited to first 5 to avoid excessively long logs)
+    if len(products) > 0 {
+        logProducts := products
+        if len(products) > 5 {
+            logProducts = products[:5]
+        }
+        
+        productIds := make([]string, len(logProducts))
+        productNames := make([]string, len(logProducts))
+        
+        for i, p := range logProducts {
+            productIds[i] = p.ID.String()
+            productNames[i] = p.Name
+        }
+        
+        h.logger.Debug().
+            Str("handler", "ProductHandler.List").
+            Str("request_id", requestID).
+            Strs("product_ids", productIds).
+            Strs("product_names", productNames).
+            Int("total_results", len(products)).
+            Msg("Sample of products being returned")
+    }
+
+    h.logger.Info().
+        Str("handler", "ProductHandler.List").
+        Str("request_id", requestID).
+        Int("products_count", len(products)).
+        Int("total_count", total).
+        Int("page", params.Page).
+        Int("per_page", params.PerPage).
+        Int("status_code", http.StatusOK).
+        Msg("Product listing successfully returned")
+
+    return c.JSON(http.StatusOK, response)
 }
 
 // Update handles PUT /api/products/:id

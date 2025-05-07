@@ -5,15 +5,15 @@ import (
 	"context"
 
 	"github.com/rs/zerolog"
-	"github.com/stripe/stripe-go/v74"
-	"github.com/stripe/stripe-go/v74/client"
+	"github.com/stripe/stripe-go/v82"
+	"github.com/stripe/stripe-go/v82/client"
 )
 
 // StripeService defines operations for interacting with the Stripe API
 type StripeService interface {
 	// ProcessWebhook handles incoming webhook events from Stripe
 	ProcessWebhook(ctx context.Context, payload []byte, signature, webhookSecret string) error
-	
+
 	// Other Stripe operations would be defined here
 }
 
@@ -31,13 +31,13 @@ func NewClient(secretKey string, logger zerolog.Logger) *Client {
 		logger.Error().Msg("Missing stripe secretKey")
 		return nil
 	}
-	
+
 	// Set the API key for the stripe package as a whole
 	stripe.Key = secretKey
-	
+
 	// Create a new Stripe client with the secret key
 	api := client.New(secretKey, nil)
-	
+
 	return &Client{
 		api:    api,
 		logger: logger.With().Str("component", "stripe_service").Logger(),

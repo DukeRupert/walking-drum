@@ -16,83 +16,148 @@ import (
 
 // ProductService defines the interface for product business logic
 type ProductService interface {
-    Create(ctx context.Context, productDTO *dto.ProductCreateDTO) (*models.Product, error)
-    GetByID(ctx context.Context, id uuid.UUID) (*models.Product, error)
-    List(ctx context.Context, page, pageSize int, includeInactive bool) ([]*models.Product, int, error)
-    Update(ctx context.Context, id uuid.UUID, productDTO *dto.ProductUpdateDTO) (*models.Product, error)
-    Delete(ctx context.Context, id uuid.UUID) error
-    UpdateStockLevel(ctx context.Context, id uuid.UUID, quantity int) error
+	Create(ctx context.Context, productDTO *dto.ProductCreateDTO) (*models.Product, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Product, error)
+	List(ctx context.Context, page, pageSize int, includeInactive bool) ([]*models.Product, int, error)
+	Update(ctx context.Context, id uuid.UUID, productDTO *dto.ProductUpdateDTO) (*models.Product, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+	UpdateStockLevel(ctx context.Context, id uuid.UUID, quantity int) error
 }
 
 // productService is the private implementation of ProductService
 type productService struct {
-    productRepo  interfaces.ProductRepository
-    stripeClient *stripe.Client
-	logger		 zerolog.Logger
+	productRepo  interfaces.ProductRepository
+	stripeClient *stripe.Client
+	logger       zerolog.Logger
 }
 
 // NewProductService creates a new instance of ProductService
 func NewProductService(repo interfaces.ProductRepository, stripe *stripe.Client, logger zerolog.Logger) ProductService {
-    return &productService{
-        productRepo:  repo,
-        stripeClient: stripe,
-		logger:	logger.With().Str("component", "product_service").Logger(),
-    }
+	return &productService{
+		productRepo:  repo,
+		stripeClient: stripe,
+		logger:       logger.With().Str("component", "product_service").Logger(),
+	}
 }
 
 // Create adds a new product to the system (both in DB and Stripe)
 func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCreateDTO) (*models.Product, error) {
-    // 1. Validate productDTO
-    if problems := productDTO.Valid(ctx); len(problems) > 0 {
-        return nil, fmt.Errorf("invalid product data: %v", problems)
-    }
+	s.logger.Debug().
+		Str("function", "productService.Create").
+		Interface("productDTO", productDTO).
+		Msg("Starting product creation")
 
-    // 2. Create product in Stripe first
-    stripeProduct, err := s.stripeClient.CreateProduct(ctx, &stripe.ProductCreateParams{
-        Name:        productDTO.Name,
-        Description: productDTO.Description,
-        Images:      []string{productDTO.ImageURL},
-        Active:      productDTO.Active,
-        Metadata: map[string]string{
-            "origin":       productDTO.Origin,
-            "roast_level":  productDTO.RoastLevel,
-            "flavor_notes": productDTO.FlavorNotes,
-            "weight":       fmt.Sprintf("%d", productDTO.Weight),
-        },
-    })
-    if err != nil {
-        return nil, fmt.Errorf("failed to create product in Stripe: %w", err)
-    }
+	// 1. Validate productDTO
+	if problems := productDTO.Valid(ctx); len(problems) > 0 {
+		s.logger.Error().
+			Str("function", "productService.Create").
+			Interface("problems", problems).
+			Msg("Product validation failed")
+		return nil, fmt.Errorf("invalid product data: %v", problems)
+	}
 
-    // 3. Create product in local database
-    now := time.Now()
-    product := &models.Product{
-        ID:          uuid.New(),
-        Name:        productDTO.Name,
-        Description: productDTO.Description,
-        ImageURL:    productDTO.ImageURL,
-        Active:      productDTO.Active,
-        StockLevel:  productDTO.StockLevel,
-        Weight:      productDTO.Weight,
-        Origin:      productDTO.Origin,
-        RoastLevel:  productDTO.RoastLevel,
-        FlavorNotes: productDTO.FlavorNotes,
-        StripeID:    stripeProduct.ID,
-        CreatedAt:   now,
-        UpdatedAt:   now,
-    }
+	s.logger.Debug().
+		Str("function", "productService.Create").
+		Msg("Product validation passed")
 
-    // 4. Save to database
-    if err := s.productRepo.Create(ctx, product); err != nil {
-        // If database creation fails, archive the Stripe product
-        if archiveErr := s.stripeClient.ArchiveProduct(ctx, stripeProduct.ID); archiveErr != nil {
-            // Log this error, but continue with the main error
-            s.logger.Error().Err(archiveErr).Msg("Failed to archive Stripe product after database error")
-        }
-        return nil, fmt.Errorf("failed to create product in database: %w", err)
-    }
+	// 2. Create product in Stripe first
+	s.logger.Debug().
+		Str("function", "productService.Create").
+		Str("name", productDTO.Name).
+		Str("description", productDTO.Description).
+		Str("imageURL", productDTO.ImageURL).
+		Bool("active", productDTO.Active).
+		Msg("Creating product in Stripe")
 
-    return product, nil
+	stripeProduct, err := s.stripeClient.CreateProduct(ctx, &stripe.ProductCreateParams{
+		Name:        productDTO.Name,
+		Description: productDTO.Description,
+		Images:      []string{productDTO.ImageURL},
+		Active:      productDTO.Active,
+		Metadata: map[string]string{
+			"origin":       productDTO.Origin,
+			"roast_level":  productDTO.RoastLevel,
+			"flavor_notes": productDTO.FlavorNotes,
+			"weight":       fmt.Sprintf("%d", productDTO.Weight),
+		},
+	})
+	if err != nil {
+		s.logger.Error().
+			Str("function", "productService.Create").
+			Err(err).
+			Msg("Failed to create product in Stripe")
+		return nil, fmt.Errorf("failed to create product in Stripe: %w", err)
+	}
+
+	s.logger.Debug().
+		Str("function", "productService.Create").
+		Str("stripeProductID", stripeProduct.ID).
+		Msg("Successfully created product in Stripe")
+
+	// 3. Create product in local database
+	now := time.Now()
+	product := &models.Product{
+		ID:          uuid.New(),
+		Name:        productDTO.Name,
+		Description: productDTO.Description,
+		ImageURL:    productDTO.ImageURL,
+		Active:      productDTO.Active,
+		StockLevel:  productDTO.StockLevel,
+		Weight:      productDTO.Weight,
+		Origin:      productDTO.Origin,
+		RoastLevel:  productDTO.RoastLevel,
+		FlavorNotes: productDTO.FlavorNotes,
+		StripeID:    stripeProduct.ID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	s.logger.Debug().
+		Str("function", "productService.Create").
+		Str("productID", product.ID.String()).
+		Str("stripeID", product.StripeID).
+		Msg("Preparing to save product to database")
+
+	// 4. Save to database
+	if err := s.productRepo.Create(ctx, product); err != nil {
+		s.logger.Error().
+			Str("function", "productService.Create").
+			Err(err).
+			Str("productID", product.ID.String()).
+			Msg("Failed to create product in database")
+
+		// If database creation fails, archive the Stripe product
+		s.logger.Debug().
+			Str("function", "productService.Create").
+			Str("stripeProductID", stripeProduct.ID).
+			Msg("Attempting to archive Stripe product after database failure")
+
+		if archiveErr := s.stripeClient.ArchiveProduct(ctx, stripeProduct.ID); archiveErr != nil {
+			// Log this error, but continue with the main error
+			s.logger.Error().
+				Str("function", "productService.Create").
+				Err(archiveErr).
+				Str("stripeProductID", stripeProduct.ID).
+				Msg("Failed to archive Stripe product after database error")
+		} else {
+			s.logger.Debug().
+				Str("function", "productService.Create").
+				Str("stripeProductID", stripeProduct.ID).
+				Msg("Successfully archived Stripe product after database failure")
+		}
+
+		return nil, fmt.Errorf("failed to create product in database: %w", err)
+	}
+
+	s.logger.Info().
+		Str("function", "productService.Create").
+		Str("productID", product.ID.String()).
+		Str("stripeID", product.StripeID).
+		Str("name", product.Name).
+		Int("stockLevel", product.StockLevel).
+		Msg("Product successfully created")
+
+	return product, nil
 }
 
 // GetByID retrieves a product by its ID
@@ -103,11 +168,84 @@ func (s *productService) GetByID(ctx context.Context, id uuid.UUID) (*models.Pro
 }
 
 // List retrieves all products with optional filtering
-func (s *productService) List(ctx context.Context, page, pageSize int, includeInactive bool) ([]*models.Product, int, error) {
-	// TODO: Implement product listing
-	// 1. Calculate offset from page and pageSize
-	// 2. Call repository to list products
-	return nil, 0, nil
+// List retrieves all products with optional filtering
+func (s *productService) List(ctx context.Context, offset, limit int, includeInactive bool) ([]*models.Product, int, error) {
+	s.logger.Debug().
+		Str("function", "productService.List").
+		Int("offset", offset).
+		Int("limit", limit).
+		Bool("includeInactive", includeInactive).
+		Msg("Starting product listing")
+
+	// Call repository to list products with the provided parameters
+	s.logger.Debug().
+		Str("function", "productService.List").
+		Msg("Calling repository to fetch products")
+
+	products, total, err := s.productRepo.List(ctx, offset, limit, includeInactive)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "productService.List").
+			Err(err).
+			Int("offset", offset).
+			Int("limit", limit).
+			Bool("includeInactive", includeInactive).
+			Msg("Failed to retrieve products from repository")
+		return nil, 0, fmt.Errorf("failed to list products: %w", err)
+	}
+
+	// Log the result count
+	s.logger.Debug().
+		Str("function", "productService.List").
+		Int("products_count", len(products)).
+		Int("total_count", total).
+		Msg("Successfully retrieved products from repository")
+
+	// Additional processing if needed (e.g., filtering, sorting)
+	// For example, you might want to enhance the products with additional data
+	// or apply business rules that shouldn't be in the repository layer
+
+	// For example, checking stock levels and logging warning for low stock
+	for _, product := range products {
+		if product.StockLevel < 10 {
+			s.logger.Warn().
+				Str("function", "productService.List").
+				Str("product_id", product.ID.String()).
+				Str("product_name", product.Name).
+				Int("stock_level", product.StockLevel).
+				Msg("Product has low stock level")
+		}
+	}
+
+	// Log sample of products being returned (limited to first 5)
+	if len(products) > 0 {
+		logCount := len(products)
+		if logCount > 5 {
+			logCount = 5
+		}
+
+		for i := 0; i < logCount; i++ {
+			s.logger.Debug().
+				Str("function", "productService.List").
+				Str("product_id", products[i].ID.String()).
+				Str("product_name", products[i].Name).
+				Str("stripe_id", products[i].StripeID).
+				Bool("active", products[i].Active).
+				Int("stock_level", products[i].StockLevel).
+				Msgf("Product %d/%d in results", i+1, logCount)
+		}
+	}
+
+	s.logger.Info().
+		Str("function", "productService.List").
+		Int("total_products", total).
+		Int("returned_products", len(products)).
+		Int("offset", offset).
+		Int("limit", limit).
+		Bool("includeInactive", includeInactive).
+		Msg("Product listing completed successfully")
+
+	return products, total, nil
 }
 
 // Update updates an existing product
