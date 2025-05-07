@@ -95,6 +95,12 @@ func Load() (*Config, error) {
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name, cfg.DB.SSLMode,
 	)
+	
+	// Add debugging statements
+	fmt.Println("====== Database Configuration ======")
+	fmt.Println("DSN:", cfg.DB.DSN)
+	fmt.Println("MigrateURL:", cfg.DB.MigrateURL)
+	fmt.Println("===================================")
 
 	return cfg, nil
 }

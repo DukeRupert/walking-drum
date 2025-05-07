@@ -1,8 +1,8 @@
 CREATE TABLE subscriptions (
-    id SERIAL PRIMARY KEY,
-    stripe_subscription_id VARCHAR(255) UNIQUE NOT NULL,
-    customer_id INTEGER REFERENCES customers(id),
-    price_id INTEGER REFERENCES prices(id),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    stripe_id VARCHAR(255) UNIQUE NOT NULL,
+    customer_id UUID REFERENCES customers(id),
+    price_id UUID REFERENCES prices(id),
     status VARCHAR(50) NOT NULL,
     current_period_start TIMESTAMP WITH TIME ZONE,
     current_period_end TIMESTAMP WITH TIME ZONE,

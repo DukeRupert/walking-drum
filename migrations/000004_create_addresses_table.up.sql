@@ -1,6 +1,6 @@
 CREATE TABLE customer_addresses (
-    id SERIAL PRIMARY KEY,
-    customer_id INTEGER REFERENCES customers(id),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id UUID REFERENCES customers(id),
     line1 VARCHAR(255) NOT NULL,
     line2 VARCHAR(255),
     city VARCHAR(255) NOT NULL,

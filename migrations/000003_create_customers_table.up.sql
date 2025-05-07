@@ -1,6 +1,6 @@
 CREATE TABLE customers (
-    id SERIAL PRIMARY KEY,
-    stripe_customer_id VARCHAR(255) UNIQUE NOT NULL,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    stripe_id VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255),
     phone VARCHAR(50),

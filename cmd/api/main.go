@@ -52,12 +52,48 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		"file://migrations",
 		cfg.DB.MigrateURL)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to find migration configuration")
+		log.Fatal().Err(err).Str("migrateURL", cfg.DB.MigrateURL).Msg("Failed to create migration instance")
 	}
-	if err := m.Up(); err != migrate.ErrNoChange {
-		log.Info().Err(err).Msg("Failed up migration")
+
+	// Log migration source and database URL
+	log.Debug().
+		Str("source", "file://migrations").
+		Str("migrateURL", cfg.DB.MigrateURL).
+		Msg("Migration configuration")
+
+	// Get migration version before running
+	version, dirty, vErr := m.Version()
+	if vErr != nil && vErr != migrate.ErrNilVersion {
+		log.Warn().Err(vErr).Msg("Failed to get current migration version")
+	} else if vErr == migrate.ErrNilVersion {
+		log.Info().Msg("No migrations have been applied yet")
+	} else {
+		log.Info().Uint("version", version).Bool("dirty", dirty).Msg("Current migration version")
 	}
-	log.Info().Msg("Database migrations complete")
+
+	// Run migrations
+	if err := m.Up(); err != nil {
+		if err == migrate.ErrNoChange {
+			log.Info().Msg("No migration changes detected")
+		} else {
+			log.Error().Err(err).Msg("Migration failed")
+			// Consider whether to exit or continue
+			// log.Fatal().Err(err).Msg("Migration failed, cannot continue")
+		}
+	} else {
+		// Get the new version after successful migration
+		newVersion, _, _ := m.Version()
+		log.Info().Uint("new_version", newVersion).Msg("Database migrations completed successfully")
+	}
+
+	// Close the migration
+	srcErr, dbErr := m.Close()
+	if srcErr != nil {
+		log.Warn().Err(srcErr).Msg("Error closing migration source")
+	}
+	if dbErr != nil {
+		log.Warn().Err(dbErr).Msg("Error closing migration database connection")
+	}
 
 	// Initialize Stripe client
 	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey, logger)

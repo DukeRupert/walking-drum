@@ -1,7 +1,7 @@
 CREATE TABLE prices (
-    id SERIAL PRIMARY KEY,
-    stripe_price_id VARCHAR(255) UNIQUE NOT NULL,
-    product_id INTEGER REFERENCES products(id),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    stripe_id VARCHAR(255) UNIQUE NOT NULL,
+    product_id UUID REFERENCES products(id),
     nickname VARCHAR(255),
     unit_amount INTEGER NOT NULL,
     currency VARCHAR(3) DEFAULT 'USD',
