@@ -7,7 +7,7 @@ import (
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
-	"github.com/dukerupert/walking-drum/internal/stripe"
+	"github.com/dukerupert/walking-drum/internal/services/stripe"
 	"github.com/google/uuid"
 )
 

@@ -5,9 +5,9 @@ go 1.23.0
 toolchain go1.23.9
 
 require (
-	github.com/chaindead/zerocfg v0.1.6
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/google/uuid v1.6.0
+	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/lib/pq v1.10.9
 	github.com/rs/zerolog v1.34.0
@@ -28,5 +28,4 @@ require (
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

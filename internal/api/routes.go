@@ -50,6 +50,9 @@ func (s *Server) setupRoutes() {
 	subscriptions.POST("/:id/pause", s.subscriptionHandler.Pause)
 	subscriptions.POST("/:id/resume", s.subscriptionHandler.Resume)
 	customers.GET("/:customerId/subscriptions", s.subscriptionHandler.ListByCustomer)
+
+	// Webhook route - no authentication middleware for this route
+	v1.POST("/webhooks/stripe", s.webhookHandler.HandleWebhook)
 	
 	// Health check route
 	s.echo.GET("/healthz", func(c echo.Context) error {

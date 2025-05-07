@@ -20,10 +20,12 @@ type ProductCreateParams struct {
 
 // CreateProduct creates a new product in Stripe
 func (c *Client) CreateProduct(ctx context.Context, params *ProductCreateParams) (*stripe.Product, error) {
-	if params == nil {
-		return nil, errors.New("params cannot be nil")
+	c.logger.Info().Msg("Executing CreateProduct()")
+	if c.api == nil {
+		return nil, errors.New("stripe client not initialized")
 	}
-
+	
+	// Use the pre-configured API client which already has the API key set
 	productParams := &stripe.ProductParams{
 		Name:        stripe.String(params.Name),
 		Description: stripe.String(params.Description),
@@ -41,7 +43,7 @@ func (c *Client) CreateProduct(ctx context.Context, params *ProductCreateParams)
 		}
 	}
 
-	return product.New(productParams)
+	return c.api.Products.New(productParams)
 }
 
 // GetProduct retrieves a product from Stripe by ID

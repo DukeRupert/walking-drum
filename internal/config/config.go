@@ -1,38 +1,15 @@
+// internal/config/config.go
 package config
 
 import (
 	"fmt"
-	zfg "github.com/chaindead/zerocfg"
-	"github.com/chaindead/zerocfg/env"
+	"os"
+	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
-// Define configuration options
-var (
-	// Application settings
-	configPath = zfg.Str("config.path", "", "path to config file", zfg.Alias("c"))
-	appName    = zfg.Str("app.name", "coffee-subscription-service", "application name")
-	appEnv     = zfg.Str("app.env", "development", "application environment")
-	appPort    = zfg.Uint("app.port", 8080, "application port")
-	appDebug   = zfg.Bool("app.debug", true, "debug mode")
-
-	// Database settings
-	dbHost     = zfg.Str("db.host", "localhost", "database host")
-	dbPort     = zfg.Uint("db.port", 5432, "database port")
-	dbName     = zfg.Str("db.name", "coffee_subscriptions", "database name")
-	dbUser     = zfg.Str("db.user", "postgres", "database user")
-	dbPassword = zfg.Str("db.password", "postgres", "database password", zfg.Secret())
-	dbSslMode  = zfg.Str("db.ssl_mode", "disable", "database ssl mode")
-
-	// Stripe settings
-	stripeSecretKey     = zfg.Str("stripe.secret_key", "sk_test_your_stripe_secret_key", "stripe secret key", zfg.Secret())
-	stripeWebhookSecret = zfg.Str("stripe.webhook_secret", "whsec_your_stripe_webhook_secret", "stripe webhook secret", zfg.Secret())
-
-	// JWT settings
-	jwtSecret     = zfg.Str("jwt.secret", "your_jwt_secret_key", "JWT secret key", zfg.Secret())
-	jwtExpiration = zfg.Dur("jwt.expiration", 24*60*60, "JWT expiration in seconds")
-)
-
-// Config holds all configuration settings
+// Config holds all configuration for the application
 type Config struct {
 	App    AppConfig
 	DB     DBConfig
@@ -44,20 +21,20 @@ type Config struct {
 type AppConfig struct {
 	Name  string
 	Env   string
-	Port  uint
+	Port  int
 	Debug bool
 }
 
 // DBConfig holds database configuration
 type DBConfig struct {
 	Host       string
-	Port       uint
+	Port       int
 	Name       string
 	User       string
 	Password   string
-	SslMode    string
-	DSN        string // Connection string
-	MigrateURL string // Connection URL for golang-migrate
+	SSLMode    string
+	DSN        string
+	MigrateURL string
 }
 
 // StripeConfig holds Stripe API configuration
@@ -69,62 +46,97 @@ type StripeConfig struct {
 // JWTConfig holds JWT authentication configuration
 type JWTConfig struct {
 	Secret     string
-	Expiration int
+	Expiration string
 }
 
-// Load loads configuration from environment and YAML file
+// Load loads configuration from environment variables
 func Load() (*Config, error) {
-	// Parse configuration sources
-	err := zfg.Parse(
-		env.New(), // Environment variables
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse configuration: %w", err)
-	}
+	// Load .env file if it exists
+	godotenv.Load()
 
-	// Create config struct
 	cfg := &Config{
 		App: AppConfig{
-			Name:  *appName,
-			Env:   *appEnv,
-			Port:  *appPort,
-			Debug: *appDebug,
+			Name:  getEnv("APP_NAME", "coffee-subscription-service"),
+			Env:   getEnv("APP_ENV", "development"),
+			Port:  getEnvAsInt("APP_PORT", 8080),
+			Debug: getEnvAsBool("APP_DEBUG", true),
 		},
 		DB: DBConfig{
-			Host:     *dbHost,
-			Port:     *dbPort,
-			Name:     *dbName,
-			User:     *dbUser,
-			Password: *dbPassword,
-			SslMode:  *dbSslMode,
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnvAsInt("DB_PORT", 5432),
+			Name:     getEnv("DB_NAME", "coffee_subscriptions"),
+			User:     getEnv("DB_USER", "postgres"),
+			Password: getEnv("DB_PASSWORD", "postgres"),
+			SSLMode:  getEnv("DB_SSL_MODE", "disable"),
 		},
 		Stripe: StripeConfig{
-			SecretKey:     *stripeSecretKey,
-			WebhookSecret: *stripeWebhookSecret,
+			SecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
+			WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 		JWT: JWTConfig{
-			Secret:     *jwtSecret,
-			Expiration: int(*jwtExpiration),
+			Secret:     getEnv("JWT_SECRET", "your_jwt_secret_key"),
+			Expiration: getEnv("JWT_EXPIRATION", "24h"),
 		},
+	}
+
+	// Validate required configuration
+	if err := cfg.validate(); err != nil {
+		return nil, err
 	}
 
 	// Construct database connection string
 	cfg.DB.DSN = fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, cfg.DB.SslMode,
+		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, cfg.DB.SSLMode,
 	)
 
 	// Construct URL-formatted connection string for golang-migrate
 	cfg.DB.MigrateURL = fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name, cfg.DB.SslMode,
+		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name, cfg.DB.SSLMode,
 	)
 
 	return cfg, nil
 }
 
-// PrintConfig prints the current configuration (hiding secrets)
-func PrintConfig() {
-	fmt.Println("Current configuration:")
-	fmt.Println(zfg.Show())
+// validate checks if all required configuration is present
+func (c *Config) validate() error {
+	// In production, some values are required
+	if c.App.Env == "production" {
+		if c.Stripe.SecretKey == "" {
+			return fmt.Errorf("STRIPE_SECRET_KEY is required in production")
+		}
+		if c.Stripe.WebhookSecret == "" {
+			return fmt.Errorf("STRIPE_WEBHOOK_SECRET is required in production")
+		}
+		if c.JWT.Secret == "your_jwt_secret_key" {
+			return fmt.Errorf("JWT_SECRET must be changed in production")
+		}
+	}
+
+	return nil
+}
+
+// Helper functions to get environment variables with default values
+func getEnv(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsInt(key string, defaultValue int) int {
+	valueStr := getEnv(key, "")
+	if value, err := strconv.Atoi(valueStr); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	valueStr := getEnv(key, "")
+	if value, err := strconv.ParseBool(valueStr); err == nil {
+		return value
+	}
+	return defaultValue
 }

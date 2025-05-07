@@ -27,35 +27,74 @@ func NewProductHandler(productService services.ProductService, logger zerolog.Lo
 
 // Create handles POST /api/products
 func (h *ProductHandler) Create(c echo.Context) error {
-	// TODO: Implement product creation
+	// Define the request/response types inline, following Ryer's pattern
+	type request = dto.ProductCreateDTO
+	type response struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		ImageURL    string `json:"image_url"`
+		Active      bool   `json:"active"`
+		StockLevel  int    `json:"stock_level"`
+		Weight      int    `json:"weight"`
+		Origin      string `json:"origin"`
+		RoastLevel  string `json:"roast_level"`
+		FlavorNotes string `json:"flavor_notes"`
+		CreatedAt   string `json:"created_at"`
+		UpdatedAt   string `json:"updated_at"`
+	}
+
 	ctx := c.Request().Context()
-	// 1. Bind request to ProductCreateDTO
-	var req dto.ProductCreateDTO
+	
+	// 1. Bind request
+	var req request
 	if err := c.Bind(&req); err != nil {
+		h.logger.Error().Err(err).Msg("Failed to bind request")
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
 	}
-	// 2. Validate DTO
-	if err := c.Validate(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	
+	// 2. Validate using our validator interface (Mat Ryer style)
+	if problems := req.Valid(ctx); len(problems) > 0 {
+		h.logger.Error().
+			Interface("problems", problems).
+			Msg("Validation failed")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error":    "Validation failed",
+			"problems": problems,
+		})
 	}
 	
-	// 3. Call productService.Create
-	product, err := h.productService.Create(ctx, &req); 
+	// 3. Call service
+	product, err := h.productService.Create(ctx, &req)
 	if err != nil {
 		h.logger.Error().Err(err).
-			Str("product_id", product.ID.String()).
-			Str("product_name", product.Name).
+			Str("product_name", req.Name).
 			Msg("Failed to create product")
-
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create product")
 	}
-	// 4. Return appropriate response
+	
+	// 4. Map to response
+	resp := response{
+		ID:          product.ID.String(),
+		Name:        product.Name,
+		Description: product.Description,
+		ImageURL:    product.ImageURL,
+		Active:      product.Active,
+		StockLevel:  product.StockLevel,
+		Weight:      product.Weight,
+		Origin:      product.Origin,
+		RoastLevel:  product.RoastLevel,
+		FlavorNotes: product.FlavorNotes,
+		CreatedAt:   product.CreatedAt.Format(http.TimeFormat),
+		UpdatedAt:   product.UpdatedAt.Format(http.TimeFormat),
+	}
+	
 	h.logger.Info().
 		Str("product_id", product.ID.String()).
 		Str("product_name", product.Name).
 		Msg("Product created successfully")
-
-	return c.JSON(http.StatusCreated, product)
+	
+	return c.JSON(http.StatusCreated, resp)
 }
 
 // Get handles GET /api/products/:id

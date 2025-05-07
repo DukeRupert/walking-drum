@@ -24,6 +24,7 @@ type Server struct {
 	priceHandler        *handlers.PriceHandler
 	customerHandler     *handlers.CustomerHandler
 	subscriptionHandler *handlers.SubscriptionHandler
+	webhookHandler      *handlers.WebhookHandler
 }
 
 // NewServer creates a new server instance with all its dependencies
@@ -35,6 +36,7 @@ func NewServer(
 	priceHandler *handlers.PriceHandler,
 	customerHandler *handlers.CustomerHandler,
 	subscriptionHandler *handlers.SubscriptionHandler,
+	webhookHandler *handlers.WebhookHandler,
 ) *Server {
 	e := echo.New()
 
@@ -56,6 +58,7 @@ func NewServer(
 		priceHandler:        priceHandler,
 		customerHandler:     customerHandler,
 		subscriptionHandler: subscriptionHandler,
+		webhookHandler:      webhookHandler,
 	}
 
 	// Setup router

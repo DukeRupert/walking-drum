@@ -32,7 +32,7 @@ func NewDB(cfg *config.Config) (*DB, error) {
 		cfg.DB.User,
 		cfg.DB.Password,
 		cfg.DB.Name,
-		cfg.DB.SslMode,
+		cfg.DB.SSLMode,
 	)
 
 	sqlDB, err := sql.Open("postgres", connStr)

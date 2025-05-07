@@ -22,7 +22,7 @@ import (
 	"github.com/dukerupert/walking-drum/internal/handlers"
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
 	"github.com/dukerupert/walking-drum/internal/services"
-	"github.com/dukerupert/walking-drum/internal/stripe"
+	"github.com/dukerupert/walking-drum/internal/services/stripe"
 )
 
 func init() {
@@ -32,17 +32,12 @@ func init() {
 
 func run(ctx context.Context, args []string, w io.Writer) error {
 	// Initialize logger
-	logger := zerolog.New(os.Stdout)
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load configuration")
-	}
-
-	// Print configuration (with secrets hidden)
-	if cfg.App.Debug {
-		config.PrintConfig()
 	}
 
 	// Initialize database
@@ -65,13 +60,13 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	log.Info().Msg("Database migrations complete")
 
 	// Initialize Stripe client
-	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey)
+	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey, logger)
 
 	// Initialize repositories
 	repos := postgres.NewRepositories(db)
 
 	// Initialize services
-	productService := services.NewProductService(repos.Product, stripeClient)
+	productService := services.NewProductService(repos.Product, stripeClient, logger)
 	priceService := services.NewPriceService(repos.Price, repos.Product, stripeClient)
 	customerService := services.NewCustomerService(repos.Customer, stripeClient)
 	subscriptionService := services.NewSubscriptionService(
@@ -81,12 +76,14 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		repos.Price,
 		stripeClient,
 	)
+	stripeService := stripe.NewClient(cfg.Stripe.SecretKey, logger)
 
 	// Initialize handlers
 	productHandler := handlers.NewProductHandler(productService, logger)
 	priceHandler := handlers.NewPriceHandler(priceService)
 	customerHandler := handlers.NewCustomerHandler(customerService)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
+	webhookHandler := handlers.NewWebhookHandler(logger, stripeService, cfg.Stripe.WebhookSecret)
 
 	// Initialize server with handlers
 	server := api.NewServer(
@@ -97,12 +94,13 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		priceHandler,
 		customerHandler,
 		subscriptionHandler,
+		webhookHandler,
 	)
 
 	// Start the server in a goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Info().Uint("port", cfg.App.Port).Msg("Server listening on: ")
+		log.Info().Uint("port", uint(cfg.App.Port)).Msg("Server listening on: ")
 		serverErrors <- server.Start()
 	}()
 
