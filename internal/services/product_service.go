@@ -162,9 +162,68 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 
 // GetByID retrieves a product by its ID
 func (s *productService) GetByID(ctx context.Context, id uuid.UUID) (*models.Product, error) {
-	// TODO: Implement get product by ID
-	// 1. Call repository to fetch product
-	return nil, nil
+    s.logger.Debug().
+        Str("function", "productService.GetByID").
+        Str("product_id", id.String()).
+        Msg("Starting product retrieval by ID")
+    
+    // Validate ID
+    if id == uuid.Nil {
+        s.logger.Error().
+            Str("function", "productService.GetByID").
+            Msg("Nil UUID provided")
+        return nil, fmt.Errorf("invalid product ID: nil UUID")
+    }
+    
+    // 1. Call repository to fetch product
+    s.logger.Debug().
+        Str("function", "productService.GetByID").
+        Str("product_id", id.String()).
+        Msg("Calling repository to fetch product")
+        
+    product, err := s.productRepo.GetByID(ctx, id)
+    if err != nil {
+        s.logger.Error().
+            Str("function", "productService.GetByID").
+            Err(err).
+            Str("product_id", id.String()).
+            Msg("Failed to retrieve product from repository")
+        return nil, fmt.Errorf("failed to retrieve product: %w", err)
+    }
+    
+    // Check if product was found
+    if product == nil {
+        s.logger.Error().
+            Str("function", "productService.GetByID").
+            Str("product_id", id.String()).
+            Msg("Product not found")
+        return nil, fmt.Errorf("product with ID %s not found", id)
+    }
+    
+    // Additional business logic can be added here
+    // For example, check if the product is active for non-admin users
+    // This would be an appropriate place to add that logic
+    
+    // Check stock level and log warning if low
+    if product.StockLevel < 10 {
+        s.logger.Warn().
+            Str("function", "productService.GetByID").
+            Str("product_id", id.String()).
+            Str("product_name", product.Name).
+            Int("stock_level", product.StockLevel).
+            Msg("Product has low stock level")
+    }
+    
+    s.logger.Info().
+        Str("function", "productService.GetByID").
+        Str("product_id", id.String()).
+        Str("product_name", product.Name).
+        Str("stripe_id", product.StripeID).
+        Bool("active", product.Active).
+        Int("stock_level", product.StockLevel).
+        Msg("Product successfully retrieved")
+        
+    return product, nil
 }
 
 // List retrieves all products with optional filtering
