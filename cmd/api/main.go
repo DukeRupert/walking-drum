@@ -55,7 +55,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		log.Fatal().Err(err).Msg("Failed to find migration configuration")
 	}
 	if err := m.Up(); err != migrate.ErrNoChange {
-		log.Fatal().Err(err).Msg("Failed up migration")
+		log.Info().Err(err).Msg("Failed up migration")
 	}
 	log.Info().Msg("Database migrations complete")
 

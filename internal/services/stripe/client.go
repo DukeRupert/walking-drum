@@ -37,7 +37,6 @@ func NewClient(secretKey string, logger zerolog.Logger) *Client {
 	
 	// Create a new Stripe client with the secret key
 	api := client.New(secretKey, nil)
-	logger.Info().Msg("Created new stripe client")
 	
 	return &Client{
 		api:    api,
