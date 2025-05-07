@@ -3,25 +3,25 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
-	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/dukerupert/walking-drum/pkg/pagination"
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
 )
 
 // ProductHandler handles HTTP requests for products
 type ProductHandler struct {
 	productService services.ProductService
+	logger         zerolog.Logger
 }
 
 // NewProductHandler creates a new product handler
-func NewProductHandler(productService services.ProductService) *ProductHandler {
+func NewProductHandler(productService services.ProductService, logger zerolog.Logger) *ProductHandler {
 	return &ProductHandler{
 		productService: productService,
+		logger:         logger.With().Str("component", "product_handler").Logger(),
 	}
 }
 
@@ -38,23 +38,10 @@ func (h *ProductHandler) Create(c echo.Context) error {
 	if err := c.Validate(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	// 3. Create product model from DTO
-	product := &models.Product{
-		ID:          uuid.New(),
-		Name:        req.Name,
-		Description: req.Description,
-		ImageURL:    req.ImageURL,
-		Active:      req.Active,
-		StockLevel:  req.StockLevel,
-		Weight:      req.Weight,
-		Origin:      req.Origin,
-		RoastLevel:  req.RoastLevel,
-		FlavorNotes: req.FlavorNotes,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-	// 4. Call productService.Create
-	if err := h.productService.Create(ctx, product); err != nil {
+	
+	// 3. Call productService.Create
+	product, err := h.productService.Create(ctx, &req); 
+	if err != nil {
 		h.logger.Error().Err(err).
 			Str("product_id", product.ID.String()).
 			Str("product_name", product.Name).
@@ -62,7 +49,7 @@ func (h *ProductHandler) Create(c echo.Context) error {
 
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create product")
 	}
-	// 5. Return appropriate response
+	// 4. Return appropriate response
 	h.logger.Info().
 		Str("product_id", product.ID.String()).
 		Str("product_name", product.Name).

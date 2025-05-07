@@ -20,9 +20,9 @@ import (
 	"github.com/dukerupert/walking-drum/internal/api"
 	"github.com/dukerupert/walking-drum/internal/config"
 	"github.com/dukerupert/walking-drum/internal/handlers"
+	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/dukerupert/walking-drum/internal/stripe"
-	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
 )
 
 func init() {
@@ -31,24 +31,27 @@ func init() {
 }
 
 func run(ctx context.Context, args []string, w io.Writer) error {
+	// Initialize logger
+	logger := zerolog.New(os.Stdout)
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
-	
+
 	// Print configuration (with secrets hidden)
 	if cfg.App.Debug {
 		config.PrintConfig()
 	}
-	
+
 	// Initialize database
 	db, err := postgres.Connect(cfg.DB)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 	defer db.Close()
-	
+
 	// Run migrations
 	m, err := migrate.New(
 		"file://migrations",
@@ -60,13 +63,13 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		log.Fatal().Err(err).Msg("Failed up migration")
 	}
 	log.Info().Msg("Database migrations complete")
-	
+
 	// Initialize Stripe client
 	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey)
-	
+
 	// Initialize repositories
 	repos := postgres.NewRepositories(db)
-	
+
 	// Initialize services
 	productService := services.NewProductService(repos.Product, stripeClient)
 	priceService := services.NewPriceService(repos.Price, repos.Product, stripeClient)
@@ -78,15 +81,13 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		repos.Price,
 		stripeClient,
 	)
-	
+
 	// Initialize handlers
-	productHandler := handlers.NewProductHandler(productService)
+	productHandler := handlers.NewProductHandler(productService, logger)
 	priceHandler := handlers.NewPriceHandler(priceService)
 	customerHandler := handlers.NewCustomerHandler(customerService)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
-	
-	// Initialize logger
- logger := zerolog.New(os.Stdout)
+
 	// Initialize server with handlers
 	server := api.NewServer(
 		cfg,
@@ -97,14 +98,14 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		customerHandler,
 		subscriptionHandler,
 	)
-	
+
 	// Start the server in a goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
 		log.Info().Uint("port", cfg.App.Port).Msg("Server listening on: ")
 		serverErrors <- server.Start()
 	}()
-	
+
 	// Wait for shutdown signal or server error
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -119,7 +120,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 			// Create shutdown context with timeout
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			
+
 			// Shutdown the server gracefully
 			if err := server.Shutdown(shutdownCtx); err != nil {
 				fmt.Fprintf(os.Stderr, "server shutdown error: %v\n", err)
@@ -127,7 +128,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		}
 		fmt.Println("Server gracefully stopped")
 	}()
-	
+
 	wg.Wait()
 	return nil
 }
