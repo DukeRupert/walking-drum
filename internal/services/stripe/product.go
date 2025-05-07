@@ -31,7 +31,7 @@ func (c *Client) CreateProduct(ctx context.Context, params *ProductCreateParams)
 	}
 
 	// Create the Stripe params
-	productParams := &stripe.ProductParams{
+	productParams := &stripe.ProductCreateParams{
 		Name:        stripe.String(params.Name),
 		Description: stripe.String(params.Description),
 		Active:      stripe.Bool(params.Active),
@@ -87,7 +87,7 @@ func (c *Client) CreateProduct(ctx context.Context, params *ProductCreateParams)
 		Msg("About to call Stripe API")
 
 	// Make the API call
-	product, err := c.api.Products.New(productParams)
+	product, err := c.api.V1Products.Create(ctx, productParams)
 
 	// Log the result
 	if err != nil {
@@ -135,12 +135,69 @@ func (c *Client) UpdateProduct(ctx context.Context, id string, params *ProductCr
 	return product.Update(id, productParams)
 }
 
-// ArchiveProduct marks a product as inactive in Stripe
-func (c *Client) ArchiveProduct(ctx context.Context, id string) error {
-	_, err := product.Update(id, &stripe.ProductParams{
-		Active: stripe.Bool(false),
-	})
-	return err
+// ArchiveProduct archives (deactivates) a product in Stripe
+func (c *Client) ArchiveProduct(ctx context.Context, stripeID string) error {
+    // Log the function entry
+    c.logger.Info().
+        Str("stripe_id", stripeID).
+        Msg("Executing ArchiveProduct()")
+
+    // Check if client is initialized
+    if c.api == nil {
+        c.logger.Error().Msg("Stripe client not initialized")
+        return errors.New("stripe client not initialized")
+    }
+
+    // Validate input
+    if stripeID == "" {
+        c.logger.Error().Msg("Empty Stripe ID provided")
+        return errors.New("stripe product ID cannot be empty")
+    }
+
+    c.logger.Debug().
+        Str("stripe_id", stripeID).
+        Msg("Creating update parameters to archive product")
+
+    // Create the update parameters to archive the product
+    // In Stripe, archiving a product is done by setting "active" to false
+    params := &stripe.ProductUpdateParams{
+        Active: stripe.Bool(false),
+    }
+
+    c.logger.Info().
+        Str("stripe_id", stripeID).
+        Bool("active", false).
+        Msg("About to call Stripe API to archive product")
+
+    // Make the API call
+    product, err := c.api.V1Products.Update(ctx, stripeID, params)
+
+    // Log the result
+    if err != nil {
+        c.logger.Error().
+            Err(err).
+            Str("stripe_id", stripeID).
+            Msg("Failed to archive product in Stripe")
+        return fmt.Errorf("failed to archive product in Stripe: %w", err)
+    }
+
+    // Verify the product was actually archived
+    if product.Active {
+        c.logger.Warn().
+            Str("stripe_id", product.ID).
+            Str("product_name", product.Name).
+            Msg("Product archiving may have failed: product still marked as active")
+        return fmt.Errorf("product archiving may have failed: product still marked as active")
+    }
+
+    // Log successful archiving with Stripe ID and product name
+    c.logger.Info().
+        Str("stripe_id", product.ID).
+        Str("product_name", product.Name).
+        Bool("active", product.Active).
+        Msg("Successfully archived product in Stripe")
+
+    return nil
 }
 
 // ListProducts retrieves a list of products from Stripe

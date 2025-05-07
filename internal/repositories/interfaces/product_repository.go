@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ProductRepository defines the interface for product data access
 type ProductRepository interface {
 	// Create adds a new product to the database
 	Create(ctx context.Context, product *models.Product) error

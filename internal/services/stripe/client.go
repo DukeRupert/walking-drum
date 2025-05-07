@@ -6,7 +6,6 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stripe/stripe-go/v82"
-	"github.com/stripe/stripe-go/v82/client"
 )
 
 // StripeService defines operations for interacting with the Stripe API
@@ -19,7 +18,7 @@ type StripeService interface {
 
 // Client is a wrapper around the Stripe API client
 type Client struct {
-	api    *client.API
+	api    *stripe.Client
 	logger zerolog.Logger
 }
 
@@ -36,7 +35,7 @@ func NewClient(secretKey string, logger zerolog.Logger) *Client {
 	stripe.Key = secretKey
 
 	// Create a new Stripe client with the secret key
-	api := client.New(secretKey, nil)
+	api := stripe.NewClient(secretKey)
 
 	return &Client{
 		api:    api,

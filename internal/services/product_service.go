@@ -168,7 +168,6 @@ func (s *productService) GetByID(ctx context.Context, id uuid.UUID) (*models.Pro
 }
 
 // List retrieves all products with optional filtering
-// List retrieves all products with optional filtering
 func (s *productService) List(ctx context.Context, offset, limit int, includeInactive bool) ([]*models.Product, int, error) {
 	s.logger.Debug().
 		Str("function", "productService.List").
@@ -261,12 +260,108 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 
 // Delete removes a product from the system
 func (s *productService) Delete(ctx context.Context, id uuid.UUID) error {
-	// TODO: Implement product deletion
-	// 1. Get existing product
-	// 2. Archive in Stripe
-	// 3. Delete from database
-	// 4. Handle errors
-	return nil
+    s.logger.Debug().
+        Str("function", "productService.Delete").
+        Str("product_id", id.String()).
+        Msg("Starting product deletion")
+
+    // 1. Get existing product from repository
+    s.logger.Debug().
+        Str("function", "productService.Delete").
+        Str("product_id", id.String()).
+        Msg("Retrieving product from repository")
+        
+    product, err := s.productRepo.GetByID(ctx, id)
+    if err != nil {
+        s.logger.Error().
+            Str("function", "productService.Delete").
+            Err(err).
+            Str("product_id", id.String()).
+            Msg("Failed to retrieve product")
+        return fmt.Errorf("failed to retrieve product for deletion: %w", err)
+    }
+    
+    if product == nil {
+        s.logger.Error().
+            Str("function", "productService.Delete").
+            Str("product_id", id.String()).
+            Msg("Product not found")
+        return fmt.Errorf("product with ID %s not found", id)
+    }
+    
+    s.logger.Debug().
+        Str("function", "productService.Delete").
+        Str("product_id", id.String()).
+        Str("product_name", product.Name).
+        Str("stripe_id", product.StripeID).
+        Msg("Product found, proceeding with deletion")
+
+    // 2. Archive in Stripe first if the product has a Stripe ID
+    if product.StripeID != "" {
+        s.logger.Debug().
+            Str("function", "productService.Delete").
+            Str("product_id", id.String()).
+            Str("stripe_id", product.StripeID).
+            Msg("Archiving product in Stripe")
+            
+        err = s.stripeClient.ArchiveProduct(ctx, product.StripeID)
+        if err != nil {
+            s.logger.Error().
+                Str("function", "productService.Delete").
+                Err(err).
+                Str("product_id", id.String()).
+                Str("stripe_id", product.StripeID).
+                Msg("Failed to archive product in Stripe")
+            return fmt.Errorf("failed to archive product in Stripe: %w", err)
+        }
+        
+        s.logger.Debug().
+            Str("function", "productService.Delete").
+            Str("product_id", id.String()).
+            Str("stripe_id", product.StripeID).
+            Msg("Successfully archived product in Stripe")
+    } else {
+        s.logger.Warn().
+            Str("function", "productService.Delete").
+            Str("product_id", id.String()).
+            Msg("Product has no Stripe ID, skipping Stripe archiving")
+    }
+
+    // 3. Delete from database
+    s.logger.Debug().
+        Str("function", "productService.Delete").
+        Str("product_id", id.String()).
+        Msg("Deleting product from database")
+        
+    err = s.productRepo.Delete(ctx, id)
+    if err != nil {
+        s.logger.Error().
+            Str("function", "productService.Delete").
+            Err(err).
+            Str("product_id", id.String()).
+            Msg("Failed to delete product from database")
+            
+        // If database deletion fails but we already archived in Stripe,
+        // we should log this inconsistency
+        if product.StripeID != "" {
+            s.logger.Warn().
+                Str("function", "productService.Delete").
+                Str("product_id", id.String()).
+                Str("stripe_id", product.StripeID).
+                Msg("Inconsistent state: Product archived in Stripe but not deleted from database")
+        }
+        
+        return fmt.Errorf("failed to delete product from database: %w", err)
+    }
+    
+    s.logger.Info().
+        Str("function", "productService.Delete").
+        Str("product_id", id.String()).
+        Str("product_name", product.Name).
+        Str("stripe_id", product.StripeID).
+        Msg("Product successfully deleted")
+        
+    return nil
 }
 
 // UpdateStockLevel updates the stock level of a product

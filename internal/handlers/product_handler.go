@@ -3,10 +3,12 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/dukerupert/walking-drum/pkg/pagination"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 )
@@ -295,11 +297,78 @@ func (h *ProductHandler) Update(c echo.Context) error {
 
 // Delete handles DELETE /api/products/:id
 func (h *ProductHandler) Delete(c echo.Context) error {
-	// TODO: Implement product deletion
-	// 1. Parse ID from URL
-	// 2. Call productService.Delete
-	// 3. Return appropriate response
-	return nil
+    ctx := c.Request().Context()
+    requestID := c.Response().Header().Get(echo.HeaderXRequestID)
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Delete").
+        Str("request_id", requestID).
+        Str("method", c.Request().Method).
+        Str("path", c.Request().URL.Path).
+        Str("remote_addr", c.Request().RemoteAddr).
+        Msg("Handling product deletion request")
+    
+    // 1. Parse ID from URL
+    idParam := c.Param("id")
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Delete").
+        Str("request_id", requestID).
+        Str("id_param", idParam).
+        Msg("Parsing product ID from URL")
+    
+    // Validate and convert the ID
+    id, err := uuid.Parse(idParam)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "ProductHandler.Delete").
+            Str("request_id", requestID).
+            Str("id_param", idParam).
+            Err(err).
+            Msg("Invalid product ID format")
+        return echo.NewHTTPError(http.StatusBadRequest, "Invalid product ID format")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Delete").
+        Str("request_id", requestID).
+        Str("product_id", id.String()).
+        Msg("Product ID parsed successfully")
+    
+    // 2. Call productService.Delete
+    h.logger.Debug().
+        Str("handler", "ProductHandler.Delete").
+        Str("request_id", requestID).
+        Str("product_id", id.String()).
+        Msg("Calling productService.Delete")
+    
+    err = h.productService.Delete(ctx, id)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "ProductHandler.Delete").
+            Str("request_id", requestID).
+            Str("product_id", id.String()).
+            Err(err).
+            Msg("Failed to delete product")
+        
+        // Check if it's a "not found" error
+        if strings.Contains(err.Error(), "not found") {
+            return echo.NewHTTPError(http.StatusNotFound, "Product not found")
+        }
+        
+        // For other errors, return internal server error
+        return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete product")
+    }
+    
+    h.logger.Info().
+        Str("handler", "ProductHandler.Delete").
+        Str("request_id", requestID).
+        Str("product_id", id.String()).
+        Int("status_code", http.StatusNoContent).
+        Msg("Product deleted successfully")
+    
+    // 3. Return appropriate response (204 No Content for successful deletion)
+    return c.NoContent(http.StatusNoContent)
 }
 
 // UpdateStockLevel handles PATCH /api/products/:id/stock
