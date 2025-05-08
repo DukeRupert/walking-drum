@@ -25,6 +25,7 @@ type Server struct {
 	customerHandler     *handlers.CustomerHandler
 	subscriptionHandler *handlers.SubscriptionHandler
 	webhookHandler      *handlers.WebhookHandler
+	checkoutHandler     *handlers.StripeCheckoutHandler
 }
 
 // NewServer creates a new server instance with all its dependencies
@@ -37,6 +38,7 @@ func NewServer(
 	customerHandler *handlers.CustomerHandler,
 	subscriptionHandler *handlers.SubscriptionHandler,
 	webhookHandler *handlers.WebhookHandler,
+	checkoutHandler *handlers.StripeCheckoutHandler,
 ) *Server {
 	e := echo.New()
 
@@ -47,7 +49,7 @@ func NewServer(
 	// Add middleware
 	e.Use(custommiddleware.RequestLogger(logger))
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
+	// e.Use(middleware.CORS())
 
 	// Create server
 	server := &Server{
@@ -59,6 +61,7 @@ func NewServer(
 		customerHandler:     customerHandler,
 		subscriptionHandler: subscriptionHandler,
 		webhookHandler:      webhookHandler,
+		checkoutHandler: 	 checkoutHandler,
 	}
 
 	// Setup router

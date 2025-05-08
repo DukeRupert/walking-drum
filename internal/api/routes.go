@@ -51,6 +51,10 @@ func (s *Server) setupRoutes() {
 	subscriptions.POST("/:id/resume", s.subscriptionHandler.Resume)
 	customers.GET("/:customerId/subscriptions", s.subscriptionHandler.ListByCustomer)
 
+	// Stripe Checkout routes
+	checkout := v1.Group("/checkout")
+	checkout.POST("/create-session", s.checkoutHandler.CreateCheckoutSession)
+
 	// Webhook route - no authentication middleware for this route
 	v1.POST("/webhooks/stripe", s.webhookHandler.HandleWebhook)
 	

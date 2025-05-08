@@ -132,6 +132,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	customerHandler := handlers.NewCustomerHandler(customerService, &logger)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
 	webhookHandler := handlers.NewWebhookHandler(logger, stripeService, cfg.Stripe.WebhookSecret)
+	checkoutHandler := handlers.NewStripeCheckoutHandler(&logger, stripeClient, productService, priceService, customerService)
 
 	// Initialize server with handlers
 	server := api.NewServer(
@@ -143,6 +144,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		customerHandler,
 		subscriptionHandler,
 		webhookHandler,
+		checkoutHandler,
 	)
 
 	// Start the server in a goroutine
