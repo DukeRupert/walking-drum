@@ -114,8 +114,8 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	repos := postgres.NewRepositories(db, &logger)
 
 	// Initialize services
-	productService := services.NewProductService(repos.Product, stripeClient, logger)
-	priceService := services.NewPriceService(repos.Price, repos.Product, stripeClient)
+	productService := services.NewProductService(repos.Product, stripeClient, &logger)
+	priceService := services.NewPriceService(repos.Price, repos.Product, stripeClient, &logger)
 	customerService := services.NewCustomerService(repos.Customer, stripeClient)
 	subscriptionService := services.NewSubscriptionService(
 		repos.Subscription,
@@ -128,7 +128,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 
 	// Initialize handlers
 	productHandler := handlers.NewProductHandler(productService, &logger)
-	priceHandler := handlers.NewPriceHandler(priceService)
+	priceHandler := handlers.NewPriceHandler(priceService, &logger)
 	customerHandler := handlers.NewCustomerHandler(customerService)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
 	webhookHandler := handlers.NewWebhookHandler(logger, stripeService, cfg.Stripe.WebhookSecret)

@@ -32,7 +32,7 @@ type productService struct {
 }
 
 // NewProductService creates a new instance of ProductService
-func NewProductService(repo interfaces.ProductRepository, stripe *stripe.Client, logger zerolog.Logger) ProductService {
+func NewProductService(repo interfaces.ProductRepository, stripe *stripe.Client, logger *zerolog.Logger) ProductService {
 	return &productService{
 		productRepo:  repo,
 		stripeClient: stripe,
