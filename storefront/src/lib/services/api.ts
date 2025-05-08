@@ -27,25 +27,19 @@ export async function getPrices(): Promise<PriceResponse> {
 }
 
 export async function getPrice(id: string): Promise<Price> {
-  console.log(`Calling getPrice() with id: ${id}`)
   const response = await fetch(`${PUBLIC_API_BASE_URL}/prices/${id}`);
-  console.log(response)
   if (!response.ok) {
     throw new Error(`Failed to fetch price with id ${id}`);
   }
   const data = await response.json();
-  console.log(data)
   return data;
 }
 
 export async function getCustomers(): Promise<CustomerResponse> {
-  console.log('Calling getCustomers()')
   const response = await fetch(`${PUBLIC_API_BASE_URL}/customers`);
-  console.log(response)
   if (!response.ok) {
     throw new Error('Failed to fetch customers');
   }
   const data = await response.json();
-  console.log(data)
   return data;
 }

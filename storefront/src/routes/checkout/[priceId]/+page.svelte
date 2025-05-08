@@ -7,7 +7,7 @@
 	import type { Stripe, StripeEmbeddedCheckout } from '@stripe/stripe-js';
 
 	let { data }: PageProps = $props();
-	let { price, product, customer, error } = $derived(data);
+	let { price, product, quantity, customer, error } = $derived(data);
 
 	let loading = $state(false);
 	let checkoutError: string | null = $state(null);
@@ -28,7 +28,7 @@
 		// Create a checkout session
 		try {
 			loading = true;
-			const response = await createCheckoutSession(price.id, customer.id);
+			const response = await createCheckoutSession(price.id, customer.id, quantity);
 			clientSecret = response.client_secret;
 
 			// Initialize the embedded checkout
@@ -102,16 +102,21 @@
 			</div>
 
 			<div class="price-breakdown">
-				<div class="price-row">
-					<span>Subscription</span>
-					<span>${((price?.amount || 0) / 100).toFixed(2)}/{price?.interval}</span>
-				</div>
-
-				<div class="price-total">
-					<span>Total per {price?.interval}</span>
-					<span>${((price?.amount || 0) / 100).toFixed(2)}</span>
-				</div>
-			</div>
+        <div class="price-row">
+          <span>Subscription</span>
+          <span>${((price?.amount || 0) / 100).toFixed(2)}/{price?.interval}</span>
+        </div>
+        
+        <div class="price-row">
+          <span>Quantity</span>
+          <span>{quantity}</span>
+        </div>
+        
+        <div class="price-total">
+          <span>Total per {price?.interval}</span>
+          <span>${((price?.amount || 0) / 100 * quantity).toFixed(2)}</span>
+        </div>
+      </div>
 
 			<div class="subscription-details">
 				<h4>Subscription Details</h4>

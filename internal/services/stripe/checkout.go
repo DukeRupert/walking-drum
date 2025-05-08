@@ -10,14 +10,18 @@ func (c *Client) CreateEmbeddedCheckoutSession(
 	customerStripeID string,
 	priceStripeID string,
 	productName string,
+	quantity int,
 	returnURL string,
 ) (*stripe.CheckoutSession, error) {
+	if quantity < 1 {
+        quantity = 1
+    }
 	params := &stripe.CheckoutSessionParams{
 		Customer: stripe.String(customerStripeID),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				Price:    stripe.String(priceStripeID),
-				Quantity: stripe.Int64(1),
+				Quantity: stripe.Int64(int64(quantity)),
 			},
 		},
 		Mode:       stripe.String(string(stripe.CheckoutSessionModeSubscription)),

@@ -35,7 +35,10 @@
 		{#each products as product}
 			<div class="product-card">
 				<div class="product-image">
-					<img src={product.image_url || 'https://unsplash.com/photos/coffee-bean-lot-TD4DBagg2wE'} alt={product.name} />
+					<img
+						src={product.image_url || 'https://unsplash.com/photos/coffee-bean-lot-TD4DBagg2wE'}
+						alt={product.name}
+					/>
 				</div>
 				<div class="product-info">
 					<h2>{product.name}</h2>
@@ -67,7 +70,24 @@
 											<span class="price-amount">${(price.amount / 100).toFixed(2)}</span>
 											<span class="price-interval">per {price.interval}</span>
 										</div>
-										<button onclick={() => goto(`/checkout/${price.id}`)}> Subscribe </button>
+
+										<!-- Add quantity selector -->
+										<div class="quantity-selector">
+											<label for="quantity-{price.id}">Quantity:</label>
+											<select id="quantity-{price.id}" bind:value={price.quantity}>
+												<option value="1">1</option>
+												<option value="2">2</option>
+												<option value="3">3</option>
+												<option value="4">4</option>
+												<option value="5">5</option>
+											</select>
+										</div>
+
+										<button
+											onclick={() => goto(`/checkout/${price.id}?quantity=${price.quantity || 1}`)}
+										>
+											Subscribe
+										</button>
 									</div>
 								{/each}
 							</div>
@@ -207,6 +227,25 @@
 			flex-direction: column;
 			align-items: flex-start;
 			gap: 1rem;
+		}
+
+		.quantity-selector {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			margin-bottom: 1rem;
+		}
+
+		.quantity-selector label {
+			font-size: 0.9rem;
+			color: var(--color-muted);
+		}
+
+		.quantity-selector select {
+			padding: 0.3rem 0.5rem;
+			border-radius: var(--radius);
+			border: 1px solid var(--color-border);
+			background-color: white;
 		}
 
 		button {

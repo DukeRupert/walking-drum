@@ -43,6 +43,7 @@ func NewCheckoutHandler(
 // CreateSessionRequest is the request body for creating a checkout session
 type CreateSessionRequest struct {
 	PriceID    string `json:"price_id"`
+	Quantity   int    `json:"quantity"`
 	CustomerID string `json:"customer_id"`
 	ReturnURL  string `json:"return_url"`
 }
@@ -198,6 +199,7 @@ func (h *CheckoutHandler) CreateSession(c echo.Context) error {
         customer.StripeID, 
         price.StripeID,
         product.Name,
+		req.Quantity,
         req.ReturnURL,
     )
     
