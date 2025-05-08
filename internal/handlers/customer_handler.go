@@ -2,30 +2,157 @@
 package handlers
 
 import (
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
 )
 
 // CustomerHandler handles HTTP requests for customers
 type CustomerHandler struct {
 	customerService services.CustomerService
+	logger         zerolog.Logger
 }
 
 // NewCustomerHandler creates a new customer handler
-func NewCustomerHandler(customerService services.CustomerService) *CustomerHandler {
+func NewCustomerHandler(customerService services.CustomerService, logger *zerolog.Logger) *CustomerHandler {
 	return &CustomerHandler{
 		customerService: customerService,
+		logger: logger.With().Str("component", "customer_handler").Logger(),
 	}
 }
 
 // Create handles POST /api/customers
 func (h *CustomerHandler) Create(c echo.Context) error {
-	// TODO: Implement customer creation
-	// 1. Bind request to CustomerCreateDTO
-	// 2. Validate DTO
-	// 3. Call customerService.Create
-	// 4. Return appropriate response
-	return nil
+    // Define the request/response types inline
+    type request = dto.CustomerCreateDTO
+    type response struct {
+        ID          string    `json:"id"`
+        Email       string    `json:"email"`
+        FirstName   string    `json:"first_name"`
+        LastName    string    `json:"last_name"`
+        PhoneNumber string    `json:"phone_number"`
+        Active      bool      `json:"active"`
+        CreatedAt   time.Time `json:"created_at"`
+        UpdatedAt   time.Time `json:"updated_at"`
+    }
+
+    ctx := c.Request().Context()
+    requestID := c.Response().Header().Get(echo.HeaderXRequestID)
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.Create").
+        Str("request_id", requestID).
+        Str("method", c.Request().Method).
+        Str("path", c.Request().URL.Path).
+        Str("remote_addr", c.Request().RemoteAddr).
+        Msg("Handling customer creation request")
+    
+    // 1. Bind request to CustomerCreateDTO
+    var req request
+    if err := c.Bind(&req); err != nil {
+        h.logger.Error().
+            Str("handler", "CustomerHandler.Create").
+            Str("request_id", requestID).
+            Err(err).
+            Msg("Failed to bind request body")
+        return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.Create").
+        Str("request_id", requestID).
+        Str("email", req.Email).
+        Str("first_name", req.FirstName).
+        Str("last_name", req.LastName).
+        Msg("Request body successfully bound")
+    
+    // 2. Validate DTO
+    if problems := req.Valid(ctx); len(problems) > 0 {
+        h.logger.Error().
+            Str("handler", "CustomerHandler.Create").
+            Str("request_id", requestID).
+            Interface("problems", problems).
+            Str("email", req.Email).
+            Msg("Customer validation failed")
+        return c.JSON(http.StatusBadRequest, map[string]interface{}{
+            "error":    "Validation failed",
+            "problems": problems,
+        })
+    }
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.Create").
+        Str("request_id", requestID).
+        Str("email", req.Email).
+        Msg("Customer validation passed")
+    
+    // 3. Call customerService.Create
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.Create").
+        Str("request_id", requestID).
+        Msg("Calling customerService.Create")
+        
+    customer, err := h.customerService.Create(ctx, &req)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "CustomerHandler.Create").
+            Str("request_id", requestID).
+            Err(err).
+            Str("email", req.Email).
+            Msg("Service layer failed to create customer")
+            
+        // Check for specific error types
+        if strings.Contains(err.Error(), "already exists") {
+            return echo.NewHTTPError(http.StatusConflict, "Customer with this email already exists")
+        }
+        
+        if strings.Contains(err.Error(), "validation") {
+            return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+        }
+        
+        return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create customer")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.Create").
+        Str("request_id", requestID).
+        Str("customer_id", customer.ID.String()).
+        Str("stripe_id", customer.StripeID).
+        Msg("Customer successfully created by service layer")
+    
+    // 4. Map to response
+    resp := response{
+        ID:          customer.ID.String(),
+        Email:       customer.Email,
+        FirstName:   customer.FirstName,
+        LastName:    customer.LastName,
+        PhoneNumber: customer.PhoneNumber,
+        Active:      customer.Active,
+        CreatedAt:   customer.CreatedAt,
+        UpdatedAt:   customer.UpdatedAt,
+    }
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.Create").
+        Str("request_id", requestID).
+        Str("response_status", http.StatusText(http.StatusCreated)).
+        Msg("Preparing response")
+    
+    h.logger.Info().
+        Str("handler", "CustomerHandler.Create").
+        Str("request_id", requestID).
+        Str("customer_id", customer.ID.String()).
+        Str("email", customer.Email).
+        Str("stripe_id", customer.StripeID).
+        Int("status_code", http.StatusCreated).
+        Msg("Customer created successfully")
+    
+    return c.JSON(http.StatusCreated, resp)
 }
 
 // Get handles GET /api/customers/:id

@@ -23,10 +23,9 @@ type PriceHandler struct {
 
 // NewPriceHandler creates a new price handler
 func NewPriceHandler(priceService services.PriceService, logger *zerolog.Logger) *PriceHandler {
-	sublogger := logger.With().Str("component", "price_handler").Logger()
 	return &PriceHandler{
 		priceService: priceService,
-		logger: sublogger,
+		logger: logger.With().Str("component", "price_handler").Logger(),
 	}
 }
 

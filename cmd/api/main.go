@@ -116,7 +116,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	// Initialize services
 	productService := services.NewProductService(repos.Product, stripeClient, &logger)
 	priceService := services.NewPriceService(repos.Price, repos.Product, stripeClient, &logger)
-	customerService := services.NewCustomerService(repos.Customer, stripeClient)
+	customerService := services.NewCustomerService(repos.Customer, stripeClient, &logger)
 	subscriptionService := services.NewSubscriptionService(
 		repos.Subscription,
 		repos.Customer,
@@ -129,7 +129,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	// Initialize handlers
 	productHandler := handlers.NewProductHandler(productService, &logger)
 	priceHandler := handlers.NewPriceHandler(priceService, &logger)
-	customerHandler := handlers.NewCustomerHandler(customerService)
+	customerHandler := handlers.NewCustomerHandler(customerService, &logger)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
 	webhookHandler := handlers.NewWebhookHandler(logger, stripeService, cfg.Stripe.WebhookSecret)
 

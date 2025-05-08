@@ -3,12 +3,16 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
 	"github.com/dukerupert/walking-drum/internal/services/stripe"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 )
 
 // CustomerService defines the interface for customer business logic
@@ -31,25 +35,160 @@ type CustomerService interface {
 type customerService struct {
 	customerRepo interfaces.CustomerRepository
 	stripeClient *stripe.Client
+	logger 	zerolog.Logger
 }
 
 // NewCustomerService creates a new customer service
-func NewCustomerService(customerRepo interfaces.CustomerRepository, stripeClient *stripe.Client) CustomerService {
+func NewCustomerService(customerRepo interfaces.CustomerRepository, stripeClient *stripe.Client, logger *zerolog.Logger) CustomerService {
 	return &customerService{
 		customerRepo: customerRepo,
 		stripeClient: stripeClient,
+		logger: logger.With().Str("component", "customer_service").Logger(),
 	}
 }
 
 // Create adds a new customer to the system (both in DB and Stripe)
 func (s *customerService) Create(ctx context.Context, customerDTO *dto.CustomerCreateDTO) (*models.Customer, error) {
-	// TODO: Implement customer creation
-	// 1. Validate customerDTO
-	// 2. Check if customer already exists by email
-	// 3. Create customer in Stripe
-	// 4. Create customer in database
-	// 5. Handle errors and rollback if needed
-	return nil, nil
+    s.logger.Debug().
+        Str("function", "customerService.Create").
+        Interface("customerDTO", customerDTO).
+        Msg("Starting customer creation")
+
+    // 1. Validate customerDTO
+    if problems := customerDTO.Valid(ctx); len(problems) > 0 {
+        s.logger.Error().
+            Str("function", "customerService.Create").
+            Interface("problems", problems).
+            Msg("Customer validation failed")
+        return nil, fmt.Errorf("invalid customer data: %v", problems)
+    }
+    
+    s.logger.Debug().
+        Str("function", "customerService.Create").
+        Msg("Customer validation passed")
+
+    // 2. Check if customer already exists by email
+    s.logger.Debug().
+        Str("function", "customerService.Create").
+        Str("email", customerDTO.Email).
+        Msg("Checking if customer already exists")
+        
+    existingCustomer, err := s.customerRepo.GetByEmail(ctx, customerDTO.Email)
+    
+	if err != nil {
+        // Check if it's a "not found" error - this is expected and not an actual error
+        if strings.Contains(err.Error(), "not found") {
+            s.logger.Debug().
+                Str("function", "customerService.Create").
+                Str("email", customerDTO.Email).
+                Msg("No existing customer found with this email")
+        } else {
+            // This is a real database error
+            s.logger.Error().
+                Str("function", "customerService.Create").
+                Err(err).
+                Str("email", customerDTO.Email).
+                Msg("Error checking for existing customer")
+            return nil, fmt.Errorf("error checking for existing customer: %w", err)
+        }
+    } else if existingCustomer != nil {
+        // Customer exists
+        s.logger.Error().
+            Str("function", "customerService.Create").
+            Str("email", customerDTO.Email).
+            Str("existing_id", existingCustomer.ID.String()).
+            Msg("Customer with email already exists")
+        return nil, fmt.Errorf("customer with email %s already exists", customerDTO.Email)
+    }
+
+    // 3. Create customer in Stripe first
+    s.logger.Debug().
+        Str("function", "customerService.Create").
+        Str("email", customerDTO.Email).
+        Str("name", fmt.Sprintf("%s %s", customerDTO.FirstName, customerDTO.LastName)).
+        Msg("Creating customer in Stripe")
+        
+    fullName := fmt.Sprintf("%s %s", customerDTO.FirstName, customerDTO.LastName)
+    
+    stripeCustomer, err := s.stripeClient.CreateCustomer(ctx, &stripe.CustomerCreateParams{
+        Email: customerDTO.Email,
+        Name:  fullName,
+        Phone: customerDTO.PhoneNumber,
+        Metadata: map[string]string{
+            "first_name": customerDTO.FirstName,
+            "last_name":  customerDTO.LastName,
+        },
+    })
+    if err != nil {
+        s.logger.Error().
+            Str("function", "customerService.Create").
+            Err(err).
+            Str("email", customerDTO.Email).
+            Msg("Failed to create customer in Stripe")
+        return nil, fmt.Errorf("failed to create customer in Stripe: %w", err)
+    }
+    
+    s.logger.Debug().
+        Str("function", "customerService.Create").
+        Str("stripe_id", stripeCustomer.ID).
+        Str("email", customerDTO.Email).
+        Msg("Successfully created customer in Stripe")
+
+    // 4. Create customer in local database
+    now := time.Now()
+    customer := &models.Customer{
+        ID:          uuid.New(),
+        Email:       customerDTO.Email,
+        FirstName:   customerDTO.FirstName,
+        LastName:    customerDTO.LastName,
+        PhoneNumber: customerDTO.PhoneNumber,
+        StripeID:    stripeCustomer.ID,
+        Active:      true,
+        CreatedAt:   now,
+        UpdatedAt:   now,
+    }
+    
+    s.logger.Debug().
+        Str("function", "customerService.Create").
+        Str("customer_id", customer.ID.String()).
+        Str("stripe_id", customer.StripeID).
+        Msg("Preparing to save customer to database")
+
+    // 5. Save to database
+    if err := s.customerRepo.Create(ctx, customer); err != nil {
+        s.logger.Error().
+            Str("function", "customerService.Create").
+            Err(err).
+            Str("customer_id", customer.ID.String()).
+            Msg("Failed to create customer in database")
+            
+        // If database creation fails, we should consider cleaning up the Stripe customer
+        // This is optional, as you might want to keep the Stripe customer for reconciliation purposes
+        s.logger.Debug().
+            Str("function", "customerService.Create").
+            Str("stripe_id", stripeCustomer.ID).
+            Msg("Considering cleanup of Stripe customer after database failure")
+            
+        // Decision: Log the inconsistency but don't delete from Stripe
+        // In a real production system, you might want to handle this differently
+        s.logger.Warn().
+            Str("function", "customerService.Create").
+            Str("stripe_id", stripeCustomer.ID).
+            Str("email", customerDTO.Email).
+            Msg("Customer exists in Stripe but failed to save to database")
+            
+        return nil, fmt.Errorf("failed to create customer in database: %w", err)
+    }
+
+    s.logger.Info().
+        Str("function", "customerService.Create").
+        Str("customer_id", customer.ID.String()).
+        Str("stripe_id", customer.StripeID).
+        Str("email", customer.Email).
+        Str("name", fmt.Sprintf("%s %s", customer.FirstName, customer.LastName)).
+        Msg("Customer successfully created")
+
+    return customer, nil
 }
 
 // GetByID retrieves a customer by its ID
