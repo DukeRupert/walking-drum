@@ -10,6 +10,7 @@ import (
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/dukerupert/walking-drum/pkg/pagination"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 )
@@ -159,11 +160,43 @@ func (h *CustomerHandler) Create(c echo.Context) error {
 
 // Get handles GET /api/customers/:id
 func (h *CustomerHandler) Get(c echo.Context) error {
-	// TODO: Implement customer retrieval by ID
-	// 1. Parse ID from URL
-	// 2. Call customerService.GetByID
-	// 3. Return appropriate response
-	return nil
+    // 1. Parse ID from URL
+    idParam := c.Param("id")
+    if idParam == "" {
+        return c.JSON(http.StatusBadRequest, map[string]string{
+            "error": "Missing customer ID",
+        })
+    }
+
+    // Parse ID to UUID
+    id, err := uuid.Parse(idParam)
+    if err != nil {
+        h.logger.Error().Err(err).Str("id", idParam).Msg("Invalid customer ID format")
+        return c.JSON(http.StatusBadRequest, map[string]string{
+            "error": "Invalid customer ID format",
+        })
+    }
+
+    // 2. Call customerService.GetByID
+    customer, err := h.customerService.GetByID(c.Request().Context(), id)
+    if err != nil {
+        h.logger.Error().Err(err).Str("id", idParam).Msg("Failed to get customer")
+        return c.JSON(http.StatusInternalServerError, map[string]string{
+            "error": "Failed to retrieve customer",
+        })
+    }
+
+    // Check if customer was found
+    if customer == nil {
+        return c.JSON(http.StatusNotFound, map[string]string{
+            "error": "Customer not found",
+        })
+    }
+
+    // 3. Return appropriate response
+    return c.JSON(http.StatusOK, map[string]interface{}{
+        "data": customer,
+    })
 }
 
 // GetByEmail handles GET /api/customers/email/:email

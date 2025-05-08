@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/dukerupert/walking-drum/internal/config"
 	"github.com/dukerupert/walking-drum/internal/handlers"
@@ -25,7 +26,7 @@ type Server struct {
 	customerHandler     *handlers.CustomerHandler
 	subscriptionHandler *handlers.SubscriptionHandler
 	webhookHandler      *handlers.WebhookHandler
-	checkoutHandler     *handlers.StripeCheckoutHandler
+	checkoutHandler     *handlers.CheckoutHandler
 }
 
 // NewServer creates a new server instance with all its dependencies
@@ -38,7 +39,7 @@ func NewServer(
 	customerHandler *handlers.CustomerHandler,
 	subscriptionHandler *handlers.SubscriptionHandler,
 	webhookHandler *handlers.WebhookHandler,
-	checkoutHandler *handlers.StripeCheckoutHandler,
+	checkoutHandler *handlers.CheckoutHandler,
 ) *Server {
 	e := echo.New()
 
@@ -49,7 +50,11 @@ func NewServer(
 	// Add middleware
 	e.Use(custommiddleware.RequestLogger(logger))
 	e.Use(middleware.Recover())
-	// e.Use(middleware.CORS())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+        AllowOrigins: []string{"*"},  // For development. In production, specify your frontend URL
+        AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
+        AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+    }))
 
 	// Create server
 	server := &Server{

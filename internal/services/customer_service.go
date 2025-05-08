@@ -193,9 +193,41 @@ func (s *customerService) Create(ctx context.Context, customerDTO *dto.CustomerC
 
 // GetByID retrieves a customer by its ID
 func (s *customerService) GetByID(ctx context.Context, id uuid.UUID) (*models.Customer, error) {
-	// TODO: Implement get customer by ID
-	// 1. Call repository to fetch customer
-	return nil, nil
+    // Add debug logging
+    s.logger.Debug().
+        Str("function", "customerService.GetByID").
+        Str("customer_id", id.String()).
+        Msg("Starting customer retrieval by ID")
+
+    // 1. Call repository to fetch customer
+    customer, err := s.customerRepo.GetByID(ctx, id)
+    if err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("function", "customerService.GetByID").
+            Str("customer_id", id.String()).
+            Msg("Error retrieving customer from repository")
+        return nil, fmt.Errorf("failed to retrieve customer: %w", err)
+    }
+
+    // Check if customer was found
+    if customer == nil {
+        s.logger.Warn().
+            Str("function", "customerService.GetByID").
+            Str("customer_id", id.String()).
+            Msg("Customer not found")
+        return nil, nil
+    }
+
+    // Log success
+    s.logger.Info().
+        Str("function", "customerService.GetByID").
+        Str("customer_id", id.String()).
+        Str("email", customer.Email).
+        Str("stripe_id", customer.StripeID).
+        Msg("Customer successfully retrieved")
+
+    return customer, nil
 }
 
 // GetByEmail retrieves a customer by email address

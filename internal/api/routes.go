@@ -53,7 +53,8 @@ func (s *Server) setupRoutes() {
 
 	// Stripe Checkout routes
 	checkout := v1.Group("/checkout")
-	checkout.POST("/create-session", s.checkoutHandler.CreateCheckoutSession)
+	checkout.POST("/create-session", s.checkoutHandler.CreateSession)
+	checkout.GET("/verify-session", s.checkoutHandler.VerifySession)
 
 	// Webhook route - no authentication middleware for this route
 	v1.POST("/webhooks/stripe", s.webhookHandler.HandleWebhook)

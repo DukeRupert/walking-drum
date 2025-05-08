@@ -5,12 +5,12 @@ import (
 	"github.com/stripe/stripe-go/v82/checkout/session"
 )
 
-// CreateSubscriptionCheckoutSession creates a checkout session for a subscription
-func (c *Client) CreateSubscriptionCheckoutSession(
+// CreateEmbeddedCheckoutSession creates a Stripe checkout session for embedded checkout
+func (c *Client) CreateEmbeddedCheckoutSession(
 	customerStripeID string,
 	priceStripeID string,
-	successURL string,
-	cancelURL string,
+	productName string,
+	returnURL string,
 ) (*stripe.CheckoutSession, error) {
 	params := &stripe.CheckoutSessionParams{
 		Customer: stripe.String(customerStripeID),
@@ -21,16 +21,34 @@ func (c *Client) CreateSubscriptionCheckoutSession(
 			},
 		},
 		Mode:       stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL: stripe.String(successURL),
-		CancelURL:  stripe.String(cancelURL),
+		ReturnURL:  stripe.String(returnURL),
 		UIMode:     stripe.String("embedded"),
 	}
 
-	s, err := session.New(params)
+	// Add metadata for better reporting and integration
+	if productName != "" {
+		if params.Metadata == nil {
+			params.Metadata = make(map[string]string)
+		}
+		params.Metadata["product_name"] = productName
+	}
+
+	session, err := session.New(params)
 	if err != nil {
 		c.logger.Error().Err(err).Msg("Failed to create checkout session")
 		return nil, err
 	}
 
-	return s, nil
+	return session, nil
+}
+
+// RetrieveCheckoutSession retrieves a Stripe checkout session
+func (c *Client) RetrieveCheckoutSession(sessionID string) (*stripe.CheckoutSession, error) {
+	session, err := session.Get(sessionID, nil)
+	if err != nil {
+		c.logger.Error().Err(err).Str("sessionID", sessionID).Msg("Failed to retrieve checkout session")
+		return nil, err
+	}
+
+	return session, nil
 }

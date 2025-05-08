@@ -124,15 +124,14 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		repos.Price,
 		stripeClient,
 	)
-	stripeService := stripe.NewClient(cfg.Stripe.SecretKey, logger)
 
 	// Initialize handlers
 	productHandler := handlers.NewProductHandler(productService, &logger)
 	priceHandler := handlers.NewPriceHandler(priceService, &logger)
 	customerHandler := handlers.NewCustomerHandler(customerService, &logger)
 	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
-	webhookHandler := handlers.NewWebhookHandler(logger, stripeService, cfg.Stripe.WebhookSecret)
-	checkoutHandler := handlers.NewStripeCheckoutHandler(&logger, stripeClient, productService, priceService, customerService)
+	webhookHandler := handlers.NewWebhookHandler(logger, stripeClient, cfg.Stripe.WebhookSecret)
+	checkoutHandler := handlers.NewCheckoutHandler(&logger, stripeClient, productService, priceService, customerService, subscriptionService)
 
 	// Initialize server with handlers
 	server := api.NewServer(
