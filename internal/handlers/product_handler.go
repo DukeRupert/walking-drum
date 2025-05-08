@@ -378,13 +378,69 @@ func (h *ProductHandler) List(c echo.Context) error {
 
 // Update handles PUT /api/products/:id
 func (h *ProductHandler) Update(c echo.Context) error {
-	// TODO: Implement product update
 	// 1. Parse ID from URL
+	idParam := c.Param("id")
+	if idParam == "" {
+		h.logger.Error().Msg("Product ID is required")
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Product ID is required",
+		})
+	}
+
+	// Convert string ID to UUID
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		h.logger.Error().Err(err).Str("id", idParam).Msg("Invalid product ID format")
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid product ID format",
+		})
+	}
+
 	// 2. Bind request to ProductUpdateDTO
+	var productDTO dto.ProductUpdateDTO
+	if err := c.Bind(&productDTO); err != nil {
+		h.logger.Error().Err(err).Msg("Error binding product data")
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid request body",
+		})
+	}
+
 	// 3. Validate DTO
+	ctx := c.Request().Context()
+	requestID := c.Response().Header().Get(echo.HeaderXRequestID)
+	if problems := productDTO.Valid(ctx); len(problems) > 0 {
+		h.logger.Error().
+			Str("handler", "ProductHandler.Update").
+			Str("request_id", requestID).
+			Interface("problems", problems).
+			Str("id", id.String()).
+			Msg("Product validation failed")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error":    "Validation failed",
+			"problems": problems,
+		})
+	}
+
 	// 4. Call productService.Update
+	updatedProduct, err := h.productService.Update(ctx, id, &productDTO)
+	if err != nil {
+		// Check for specific error types
+		if strings.Contains(err.Error(), "product not found") {
+			h.logger.Error().Err(err).Str("id", id.String()).Msg("Product not found")
+			return c.JSON(http.StatusNotFound, map[string]string{
+				"error": "Product not found",
+			})
+		}
+
+		h.logger.Error().Err(err).Str("id", id.String()).Msg("Error updating product")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to update product",
+		})
+	}
+
 	// 5. Return appropriate response
-	return nil
+	h.logger.Info().Str("id", id.String()).Msg("Product updated successfully")
+	return c.JSON(http.StatusOK, updatedProduct)
 }
 
 // Delete handles DELETE /api/products/:id

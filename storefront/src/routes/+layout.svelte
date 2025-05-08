@@ -1,24 +1,14 @@
 <script lang="ts">
 	import '../app.css';
+	import Navigation from '$lib/navigation/index.svelte'
 
 	let { children } = $props();
+
+	const announcement = 'Get free delivery on orders over $100'
 </script>
 
 <div class="app">
-	<header>
-	  <div class="container">
-		<div class="logo">
-		  <a href="/">Walking Drum Coffee</a>
-		</div>
-		<nav>
-		  <ul>
-			<li><a href="/">Home</a></li>
-			<li><a href="/products">Subscriptions</a></li>
-			<li><a href="/about">About</a></li>
-		  </ul>
-		</nav>
-	  </div>
-	</header>
+	<Navigation {announcement} />
   
 	<main class="container">
 	  {@render children()}

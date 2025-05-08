@@ -12,7 +12,7 @@
 		<p>Subscribe to our artisan coffee and never run out of your morning brew again.</p>
 		<button onclick={() => goto('/products')}>View Subscriptions</button>
 	</div>
-	<img src="https://unsplash.com/photos/a-large-pile-of-coffee-beans-c7du_McsRKo" alt="Coffee beans and cup" class="hero-image" />
+	<img src="https://plus.unsplash.com/premium_photo-1675237625862-d982e7f44696?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Coffee beans and cup" class="hero-image" />
 </section>
 
 <section class="features">

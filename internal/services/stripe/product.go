@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/stripe/stripe-go/v82"
 	"github.com/stripe/stripe-go/v82/product"
 )
@@ -110,29 +111,43 @@ func (c *Client) GetProduct(ctx context.Context, id string) (*stripe.Product, er
 }
 
 // UpdateProduct updates an existing product in Stripe
-func (c *Client) UpdateProduct(ctx context.Context, id string, params *ProductCreateParams) (*stripe.Product, error) {
-	if params == nil {
-		return nil, errors.New("params cannot be nil")
+// UpdateProduct updates a product in Stripe
+func (c *Client) UpdateProduct(ctx context.Context, p *models.Product) error {
+	params := &stripe.ProductParams{
+		Name:        stripe.String(p.Name),
+		Description: stripe.String(p.Description),
+		Active:      stripe.Bool(p.Active),
+		Metadata: map[string]string{
+			"product_id":   p.ID.String(),
+			"weight":       fmt.Sprintf("%d", p.Weight),
+			"origin":       p.Origin,
+			"roast_level":  p.RoastLevel,
+			"flavor_notes": p.FlavorNotes,
+		},
 	}
 
-	productParams := &stripe.ProductParams{
-		Name:        stripe.String(params.Name),
-		Description: stripe.String(params.Description),
-		Active:      stripe.Bool(params.Active),
+	if p.ImageURL != "" {
+		params.Images = []*string{stripe.String(p.ImageURL)}
 	}
 
-	if len(params.Images) > 0 {
-		productParams.Images = stripe.StringSlice(params.Images)
+	c.logger.Debug().
+		Str("stripe_id", p.StripeID).
+		Str("name", p.Name).
+		Msg("Updating product in Stripe")
+
+	_, err := product.Update(p.StripeID, params)
+	if err != nil {
+		c.logger.Error().Err(err).
+			Str("stripe_id", p.StripeID).
+			Msg("Failed to update product in Stripe")
+		return err
 	}
 
-	if len(params.Metadata) > 0 {
-		productParams.Metadata = make(map[string]string)
-		for k, v := range params.Metadata {
-			productParams.Metadata[k] = v
-		}
-	}
-
-	return product.Update(id, productParams)
+	c.logger.Info().
+		Str("stripe_id", p.StripeID).
+		Msg("Successfully updated product in Stripe")
+	
+	return nil
 }
 
 // ArchiveProduct archives (deactivates) a product in Stripe
