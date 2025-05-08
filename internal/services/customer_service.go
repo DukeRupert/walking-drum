@@ -205,12 +205,51 @@ func (s *customerService) GetByEmail(ctx context.Context, email string) (*models
 	return nil, nil
 }
 
-// List retrieves customers with optional pagination and filtering
-func (s *customerService) List(ctx context.Context, page, pageSize int, includeInactive bool) ([]*models.Customer, int, error) {
-	// TODO: Implement customer listing
-	// 1. Calculate offset from page and pageSize
-	// 2. Call repository to list customers
-	return nil, 0, nil
+// List retrieves all customers with pagination and filtering
+func (s *customerService) List(ctx context.Context, offset, limit int, includeInactive bool) ([]*models.Customer, int, error) {
+    s.logger.Debug().
+        Str("function", "customerService.List").
+        Int("offset", offset).
+        Int("limit", limit).
+        Bool("includeInactive", includeInactive).
+        Msg("Starting customer listing")
+
+    // Call repository to list customers with the provided parameters
+    s.logger.Debug().
+        Str("function", "customerService.List").
+        Msg("Calling repository to fetch customers")
+        
+    customers, total, err := s.customerRepo.List(ctx, offset, limit, includeInactive)
+    if err != nil {
+        s.logger.Error().
+            Str("function", "customerService.List").
+            Err(err).
+            Int("offset", offset).
+            Int("limit", limit).
+            Bool("includeInactive", includeInactive).
+            Msg("Failed to retrieve customers from repository")
+        return nil, 0, fmt.Errorf("failed to list customers: %w", err)
+    }
+    
+    // Log the result count
+    s.logger.Debug().
+        Str("function", "customerService.List").
+        Int("customers_count", len(customers)).
+        Int("total_count", total).
+        Msg("Successfully retrieved customers from repository")
+    
+    // Additional processing if needed (e.g., filtering, enrichment)
+    
+    s.logger.Info().
+        Str("function", "customerService.List").
+        Int("total_customers", total).
+        Int("returned_customers", len(customers)).
+        Int("offset", offset).
+        Int("limit", limit).
+        Bool("includeInactive", includeInactive).
+        Msg("Customer listing completed successfully")
+        
+    return customers, total, nil
 }
 
 // Update updates an existing customer

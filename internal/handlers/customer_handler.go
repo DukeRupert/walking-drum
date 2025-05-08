@@ -2,12 +2,14 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/services"
+	"github.com/dukerupert/walking-drum/pkg/pagination"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 )
@@ -175,11 +177,139 @@ func (h *CustomerHandler) GetByEmail(c echo.Context) error {
 
 // List handles GET /api/customers
 func (h *CustomerHandler) List(c echo.Context) error {
-	// TODO: Implement customer listing with pagination
-	// 1. Parse pagination parameters
-	// 2. Call customerService.List
-	// 3. Return paginated response
-	return nil
+    ctx := c.Request().Context()
+    requestID := c.Response().Header().Get(echo.HeaderXRequestID)
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.List").
+        Str("request_id", requestID).
+        Str("method", c.Request().Method).
+        Str("path", c.Request().URL.Path).
+        Str("remote_addr", c.Request().RemoteAddr).
+        Msg("Handling customer listing request")
+    
+    // 1. Parse pagination parameters
+    params := pagination.NewParams(c)
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.List").
+        Str("request_id", requestID).
+        Int("offset", params.Offset).
+        Int("per_page", params.PerPage).
+        Int("page", params.Page).
+        Msg("Pagination parameters parsed")
+    
+    // Parse additional filtering parameters
+    includeInactive := false
+    if c.QueryParam("include_inactive") == "true" {
+        // Only admins should see inactive customers
+        includeInactive = true
+        h.logger.Debug().
+            Str("handler", "CustomerHandler.List").
+            Str("request_id", requestID).
+            Bool("include_inactive", includeInactive).
+            Msg("Including inactive customers in results")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.List").
+        Str("request_id", requestID).
+        Int("offset", params.Offset).
+        Int("per_page", params.PerPage).
+        Bool("include_inactive", includeInactive).
+        Msg("Calling customerService.List")
+    
+    // 2. Call customerService.List
+    customers, total, err := h.customerService.List(ctx, params.Offset, params.PerPage, includeInactive)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "CustomerHandler.List").
+            Str("request_id", requestID).
+            Err(err).
+            Int("offset", params.Offset).
+            Int("per_page", params.PerPage).
+            Bool("include_inactive", includeInactive).
+            Msg("Failed to retrieve customers from service")
+        return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve customers")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.List").
+        Str("request_id", requestID).
+        Int("customers_count", len(customers)).
+        Int("total_count", total).
+        Msg("Customers retrieved successfully")
+    
+    // 3. Create the response structure
+    type customerResponse struct {
+        ID          string    `json:"id"`
+        Email       string    `json:"email"`
+        FirstName   string    `json:"first_name"`
+        LastName    string    `json:"last_name"`
+        PhoneNumber string    `json:"phone_number"`
+        Active      bool      `json:"active"`
+        CreatedAt   time.Time `json:"created_at"`
+        UpdatedAt   time.Time `json:"updated_at"`
+    }
+    
+    // Map the customers to response objects
+    customerResponses := make([]customerResponse, len(customers))
+    for i, customer := range customers {
+        customerResponses[i] = customerResponse{
+            ID:          customer.ID.String(),
+            Email:       customer.Email,
+            FirstName:   customer.FirstName,
+            LastName:    customer.LastName,
+            PhoneNumber: customer.PhoneNumber,
+            Active:      customer.Active,
+            CreatedAt:   customer.CreatedAt,
+            UpdatedAt:   customer.UpdatedAt,
+        }
+    }
+    
+    // Log a sample of customers (limited to first 5)
+    if len(customers) > 0 {
+        logCount := len(customers)
+        if logCount > 5 {
+            logCount = 5
+        }
+        
+        for i := 0; i < logCount; i++ {
+            h.logger.Debug().
+                Str("handler", "CustomerHandler.List").
+                Str("request_id", requestID).
+                Str("customer_id", customers[i].ID.String()).
+                Str("email", customers[i].Email).
+                Str("name", fmt.Sprintf("%s %s", customers[i].FirstName, customers[i].LastName)).
+                Msgf("Customer %d/%d in results", i+1, logCount)
+        }
+    }
+    
+    // 4. Create and return paginated response
+    meta := pagination.NewMeta(params, total)
+    
+    h.logger.Debug().
+        Str("handler", "CustomerHandler.List").
+        Str("request_id", requestID).
+        Int("current_page", meta.Page).
+        Int("total_pages", meta.TotalPages).
+        Int("per_page", meta.PerPage).
+        Int("total", meta.Total).
+        Msg("Pagination metadata generated")
+    
+    response := pagination.Response(customerResponses, meta)
+    
+    h.logger.Info().
+        Str("handler", "CustomerHandler.List").
+        Str("request_id", requestID).
+        Int("customers_count", len(customers)).
+        Int("total_count", total).
+        Int("page", params.Page).
+        Int("per_page", params.PerPage).
+        Int("status_code", http.StatusOK).
+        Msg("Customer listing successfully returned")
+    
+    return c.JSON(http.StatusOK, response)
 }
 
 // Update handles PUT /api/customers/:id
