@@ -170,11 +170,113 @@ func (h *PriceHandler) Create(c echo.Context) error {
 
 // Get handles GET /api/prices/:id
 func (h *PriceHandler) Get(c echo.Context) error {
-	// TODO: Implement price retrieval by ID
-	// 1. Parse ID from URL
-	// 2. Call priceService.GetByID
-	// 3. Return appropriate response
-	return nil
+    ctx := c.Request().Context()
+    requestID := c.Response().Header().Get(echo.HeaderXRequestID)
+    
+    h.logger.Debug().
+        Str("handler", "PriceHandler.Get").
+        Str("request_id", requestID).
+        Str("method", c.Request().Method).
+        Str("path", c.Request().URL.Path).
+        Str("remote_addr", c.Request().RemoteAddr).
+        Msg("Handling get price by ID request")
+    
+    // 1. Parse ID from URL
+    idParam := c.Param("id")
+    
+    h.logger.Debug().
+        Str("handler", "PriceHandler.Get").
+        Str("request_id", requestID).
+        Str("id_param", idParam).
+        Msg("Parsing price ID from URL")
+    
+    // Validate and convert the ID
+    id, err := uuid.Parse(idParam)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "PriceHandler.Get").
+            Str("request_id", requestID).
+            Str("id_param", idParam).
+            Err(err).
+            Msg("Invalid price ID format")
+        return echo.NewHTTPError(http.StatusBadRequest, "Invalid price ID format")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "PriceHandler.Get").
+        Str("request_id", requestID).
+        Str("price_id", id.String()).
+        Msg("Price ID parsed successfully")
+    
+    // 2. Call priceService.GetByID
+    h.logger.Debug().
+        Str("handler", "PriceHandler.Get").
+        Str("request_id", requestID).
+        Str("price_id", id.String()).
+        Msg("Calling priceService.GetByID")
+    
+    price, err := h.priceService.GetByID(ctx, id)
+    if err != nil {
+        h.logger.Error().
+            Str("handler", "PriceHandler.Get").
+            Str("request_id", requestID).
+            Str("price_id", id.String()).
+            Err(err).
+            Msg("Failed to retrieve price")
+        
+        // Check if it's a "not found" error
+        if strings.Contains(err.Error(), "not found") {
+            return echo.NewHTTPError(http.StatusNotFound, "Price not found")
+        }
+        
+        // For other errors, return internal server error
+        return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve price")
+    }
+    
+    h.logger.Debug().
+        Str("handler", "PriceHandler.Get").
+        Str("request_id", requestID).
+        Str("price_id", id.String()).
+        Str("product_id", price.ProductID.String()).
+        Msg("Price retrieved successfully")
+    
+    // 3. Return appropriate response
+    // Define a response structure for consistency
+    type response struct {
+        ID            string    `json:"id"`
+        ProductID     string    `json:"product_id"`
+        Name          string    `json:"name"`
+        Amount        int64     `json:"amount"`
+        Currency      string    `json:"currency"`
+        Interval      string    `json:"interval"`
+        IntervalCount int       `json:"interval_count"`
+        Active        bool      `json:"active"`
+        CreatedAt     time.Time `json:"created_at"`
+        UpdatedAt     time.Time `json:"updated_at"`
+    }
+    
+    resp := response{
+        ID:            price.ID.String(),
+        ProductID:     price.ProductID.String(),
+        Name:          price.Name,
+        Amount:        price.Amount,
+        Currency:      price.Currency,
+        Interval:      price.Interval,
+        IntervalCount: price.IntervalCount,
+        Active:        price.Active,
+        CreatedAt:     price.CreatedAt,
+        UpdatedAt:     price.UpdatedAt,
+    }
+    
+    h.logger.Info().
+        Str("handler", "PriceHandler.Get").
+        Str("request_id", requestID).
+        Str("price_id", id.String()).
+        Str("name", price.Name).
+        Int("status_code", http.StatusOK).
+        Msg("Successfully returned price details")
+    
+    return c.JSON(http.StatusOK, resp)
 }
 
 // Get handles GET /api/prices/product/:productId

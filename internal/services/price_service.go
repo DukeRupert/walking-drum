@@ -192,9 +192,78 @@ func (s *priceService) Create(ctx context.Context, priceDTO *dto.PriceCreateDTO)
 
 // GetByID retrieves a price by its ID
 func (s *priceService) GetByID(ctx context.Context, id uuid.UUID) (*models.Price, error) {
-	// TODO: Implement get price by ID
-	// 1. Call repository to fetch price
-	return nil, nil
+    s.logger.Debug().
+        Str("function", "priceService.GetByID").
+        Str("price_id", id.String()).
+        Msg("Starting price retrieval by ID")
+    
+    // Validate ID
+    if id == uuid.Nil {
+        s.logger.Error().
+            Str("function", "priceService.GetByID").
+            Msg("Nil UUID provided")
+        return nil, fmt.Errorf("invalid price ID: nil UUID")
+    }
+    
+    // Call repository to fetch price
+    s.logger.Debug().
+        Str("function", "priceService.GetByID").
+        Str("price_id", id.String()).
+        Msg("Calling repository to fetch price")
+        
+    price, err := s.priceRepo.GetByID(ctx, id)
+    if err != nil {
+        s.logger.Error().
+            Str("function", "priceService.GetByID").
+            Err(err).
+            Str("price_id", id.String()).
+            Msg("Failed to retrieve price from repository")
+        return nil, fmt.Errorf("failed to retrieve price: %w", err)
+    }
+    
+    // Check if price was found
+    if price == nil {
+        s.logger.Error().
+            Str("function", "priceService.GetByID").
+            Str("price_id", id.String()).
+            Msg("Price not found")
+        return nil, fmt.Errorf("price with ID %s not found", id)
+    }
+    
+    // Get associated product information if needed
+    // This is optional - you might want to include product details 
+    // with the price for convenience
+    product, err := s.productRepo.GetByID(ctx, price.ProductID)
+    if err != nil {
+        s.logger.Warn().
+            Str("function", "priceService.GetByID").
+            Err(err).
+            Str("price_id", id.String()).
+            Str("product_id", price.ProductID.String()).
+            Msg("Could not retrieve associated product information")
+        // We don't return an error here, as the price information was found
+        // The missing product info is just a warning
+    } else {
+        s.logger.Debug().
+            Str("function", "priceService.GetByID").
+            Str("price_id", id.String()).
+            Str("product_id", price.ProductID.String()).
+            Str("product_name", product.Name).
+            Msg("Retrieved associated product information")
+    }
+    
+    s.logger.Info().
+        Str("function", "priceService.GetByID").
+        Str("price_id", id.String()).
+        Str("product_id", price.ProductID.String()).
+        Str("name", price.Name).
+        Int64("amount", price.Amount).
+        Str("currency", price.Currency).
+        Str("interval", price.Interval).
+        Int("interval_count", price.IntervalCount).
+        Msg("Price successfully retrieved")
+        
+    return price, nil
 }
 
 // List retrieves all prices with optional filtering
