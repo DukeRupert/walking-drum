@@ -1,0 +1,27 @@
+# Configuration for Coffee Subscription Service
+
+# Application settings
+app:
+  name: coffee-subscription-service
+  env: development
+  port: 8080
+  debug: true
+
+# Database settings
+db:
+  host: localhost
+  port: 5432
+  name: coffee_subscriptions
+  user: postgres
+  password: postgres
+  ssl_mode: disable
+
+# Stripe settings
+stripe:
+  secret_key: sk_test_51RJKxwQglLwb4wZwNyraz0NAvLh37QvYmdNNARp2tYJ1Ol4LKEanhATB6Uqjs3mBvG11cIY4qASKXxCTP7jXIy7Y008iG1Tfkt
+  webhook_secret: whsec_RywEB62Ox6Yy4QGM2pPkNsRjFzEdBOMO
+
+# JWT settings
+jwt:
+  secret: a_very_secure_random_string_for_jwt_signing
+  expiration: 86400  # 24 hours in seconds
