@@ -1,11 +1,11 @@
 import type { PageLoad } from './$types';
 import { getProducts, getPrices } from '$lib/services/api';
 
-export const load: PageLoad = async () => {
+export const load: PageLoad = async ( {fetch} ) => {
     try {
         const [productsResponse, pricesResponse] = await Promise.all([
-          getProducts(),
-          getPrices()
+          getProducts(fetch),
+          getPrices(fetch)
         ]);
     
         return {
