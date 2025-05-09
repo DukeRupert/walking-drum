@@ -39,7 +39,7 @@ type subscriptionService struct {
 	customerRepo     interfaces.CustomerRepository
 	productRepo      interfaces.ProductRepository
 	priceRepo        interfaces.PriceRepository
-	stripeClient     *stripe.Client
+	stripeClient     stripe.StripeService
 }
 
 // NewSubscriptionService creates a new subscription service
@@ -48,7 +48,7 @@ func NewSubscriptionService(
 	customerRepo interfaces.CustomerRepository,
 	productRepo interfaces.ProductRepository,
 	priceRepo interfaces.PriceRepository,
-	stripeClient *stripe.Client,
+	stripeClient stripe.StripeService,
 ) SubscriptionService {
 	return &subscriptionService{
 		subscriptionRepo: subscriptionRepo,

@@ -6,7 +6,7 @@ import (
 )
 
 // CreateEmbeddedCheckoutSession creates a Stripe checkout session for embedded checkout
-func (c *Client) CreateEmbeddedCheckoutSession(
+func (c *client) CreateEmbeddedCheckoutSession(
 	customerStripeID string,
 	priceStripeID string,
 	productName string,
@@ -47,7 +47,7 @@ func (c *Client) CreateEmbeddedCheckoutSession(
 }
 
 // RetrieveCheckoutSession retrieves a Stripe checkout session
-func (c *Client) RetrieveCheckoutSession(sessionID string) (*stripe.CheckoutSession, error) {
+func (c *client) RetrieveCheckoutSession(sessionID string) (*stripe.CheckoutSession, error) {
 	session, err := session.Get(sessionID, nil)
 	if err != nil {
 		c.logger.Error().Err(err).Str("sessionID", sessionID).Msg("Failed to retrieve checkout session")

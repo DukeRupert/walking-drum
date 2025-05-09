@@ -26,7 +26,7 @@ type RecurringParams struct {
 }
 
 // CreatePrice creates a new price in Stripe
-func (c *Client) CreatePrice(ctx context.Context, params *PriceCreateParams) (*stripe.Price, error) {
+func (c *client) CreatePrice(ctx context.Context, params *PriceCreateParams) (*stripe.Price, error) {
     // Log the function entry
     c.logger.Info().
         Str("product_id", params.ProductID).
@@ -118,7 +118,7 @@ func (c *Client) CreatePrice(ctx context.Context, params *PriceCreateParams) (*s
 }
 
 // ArchivePrice deactivates a price in Stripe
-func (c *Client) ArchivePrice(ctx context.Context, stripeID string) error {
+func (c *client) ArchivePrice(ctx context.Context, stripeID string) error {
     // Log the function entry
     c.logger.Info().
         Str("stripe_id", stripeID).

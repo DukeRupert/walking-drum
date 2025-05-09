@@ -18,7 +18,7 @@ type CustomerCreateParams struct {
 }
 
 // CreateCustomer creates a new customer in Stripe
-func (c *Client) CreateCustomer(ctx context.Context, params *CustomerCreateParams) (*stripe.Customer, error) {
+func (c *client) CreateCustomer(ctx context.Context, params *CustomerCreateParams) (*stripe.Customer, error) {
     // Log the function entry
     c.logger.Info().
         Str("email", params.Email).

@@ -21,7 +21,7 @@ type ProductCreateParams struct {
 }
 
 // CreateProduct creates a new product in Stripe
-func (c *Client) CreateProduct(ctx context.Context, params *ProductCreateParams) (*stripe.Product, error) {
+func (c *client) CreateProduct(ctx context.Context, params *ProductCreateParams) (*stripe.Product, error) {
 	// Log the function entry
 	c.logger.Info().Msg("Executing CreateProduct()")
 
@@ -106,13 +106,12 @@ func (c *Client) CreateProduct(ctx context.Context, params *ProductCreateParams)
 }
 
 // GetProduct retrieves a product from Stripe by ID
-func (c *Client) GetProduct(ctx context.Context, id string) (*stripe.Product, error) {
+func (c *client) GetProduct(ctx context.Context, id string) (*stripe.Product, error) {
 	return product.Get(id, nil)
 }
 
-// UpdateProduct updates an existing product in Stripe
 // UpdateProduct updates a product in Stripe
-func (c *Client) UpdateProduct(ctx context.Context, p *models.Product) error {
+func (c *client) UpdateProduct(ctx context.Context, p *models.Product) error {
 	params := &stripe.ProductParams{
 		Name:        stripe.String(p.Name),
 		Description: stripe.String(p.Description),
@@ -151,7 +150,7 @@ func (c *Client) UpdateProduct(ctx context.Context, p *models.Product) error {
 }
 
 // ArchiveProduct archives (deactivates) a product in Stripe
-func (c *Client) ArchiveProduct(ctx context.Context, stripeID string) error {
+func (c *client) ArchiveProduct(ctx context.Context, stripeID string) error {
     // Log the function entry
     c.logger.Info().
         Str("stripe_id", stripeID).
@@ -216,7 +215,7 @@ func (c *Client) ArchiveProduct(ctx context.Context, stripeID string) error {
 }
 
 // ListProducts retrieves a list of products from Stripe
-func (c *Client) ListProducts(ctx context.Context, limit int, active *bool) ([]*stripe.Product, error) {
+func (c *client) ListProducts(ctx context.Context, limit int, active *bool) ([]*stripe.Product, error) {
 	params := &stripe.ProductListParams{}
 
 	// Set the limit using the embedded ListParams

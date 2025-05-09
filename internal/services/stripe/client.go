@@ -4,6 +4,7 @@ package stripe
 import (
 	"context"
 
+	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/rs/zerolog"
 	"github.com/stripe/stripe-go/v82"
 )
@@ -13,17 +14,42 @@ type StripeService interface {
 	// ProcessWebhook handles incoming webhook events from Stripe
 	ProcessWebhook(ctx context.Context, payload []byte, signature, webhookSecret string) error
 
-	// Other Stripe operations would be defined here
+	// CreateProduct creates a new product in Stripe
+	CreateProduct(ctx context.Context, params *ProductCreateParams) (*stripe.Product, error)
+
+	ListProducts(ctx context.Context, limit int, active *bool) ([]*stripe.Product, error)
+
+	// ArchiveProduct archives a product in Stripe
+	ArchiveProduct(ctx context.Context, productID string) error
+
+	// UpdateProduct updates an existing product in Stripe
+	UpdateProduct(ctx context.Context, p *models.Product) error
+
+	CreateCustomer(ctx context.Context, params *CustomerCreateParams) (*stripe.Customer, error)
+
+	CreatePrice(ctx context.Context, params *PriceCreateParams) (*stripe.Price, error)
+
+	ArchivePrice(ctx context.Context, stripeID string) error
+
+	CreateEmbeddedCheckoutSession(
+		customerStripeID string,
+		priceStripeID string,
+		productName string,
+		quantity int,
+		returnURL string,
+	) (*stripe.CheckoutSession, error)
+
+	RetrieveCheckoutSession(sessionID string) (*stripe.CheckoutSession, error)
 }
 
 // Client is a wrapper around the Stripe API client
-type Client struct {
+type client struct {
 	api    *stripe.Client
 	logger zerolog.Logger
 }
 
 // NewClient creates a new Stripe client
-func NewClient(secretKey string, logger zerolog.Logger) *Client {
+func NewClient(secretKey string, logger zerolog.Logger) StripeService {
 	// Ensure the key is not empty
 	if secretKey == "" {
 		// Log this error
@@ -37,8 +63,8 @@ func NewClient(secretKey string, logger zerolog.Logger) *Client {
 	// Create a new Stripe client with the secret key
 	api := stripe.NewClient(secretKey)
 
-	return &Client{
+	return &client{
 		api:    api,
-		logger: logger.With().Str("component", "stripe_service").Logger(),
+		logger: logger.With().Str("service", "stripe").Logger(),
 	}
 }

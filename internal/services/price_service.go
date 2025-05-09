@@ -28,7 +28,7 @@ type PriceService interface {
 type priceService struct {
 	priceRepo    interfaces.PriceRepository
 	productRepo  interfaces.ProductRepository
-	stripeClient *stripe.Client
+	stripeClient stripe.StripeService
 	logger       zerolog.Logger
 }
 
@@ -36,7 +36,7 @@ type priceService struct {
 func NewPriceService(
 	priceRepo interfaces.PriceRepository,
 	productRepo interfaces.ProductRepository,
-	stripeClient *stripe.Client,
+	stripeClient stripe.StripeService,
 	logger *zerolog.Logger,
 ) PriceService {
 	return &priceService{

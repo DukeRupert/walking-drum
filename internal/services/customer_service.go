@@ -34,12 +34,12 @@ type CustomerService interface {
 // customerService implements the CustomerService interface
 type customerService struct {
 	customerRepo interfaces.CustomerRepository
-	stripeClient *stripe.Client
+	stripeClient stripe.StripeService
 	logger 	zerolog.Logger
 }
 
 // NewCustomerService creates a new customer service
-func NewCustomerService(customerRepo interfaces.CustomerRepository, stripeClient *stripe.Client, logger *zerolog.Logger) CustomerService {
+func NewCustomerService(customerRepo interfaces.CustomerRepository, stripeClient stripe.StripeService, logger *zerolog.Logger) CustomerService {
 	return &customerService{
 		customerRepo: customerRepo,
 		stripeClient: stripeClient,

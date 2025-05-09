@@ -14,7 +14,7 @@ import (
 // CheckoutHandler handles checkout-related requests
 type CheckoutHandler struct {
 	logger             *zerolog.Logger
-	stripeClient       *stripe.Client
+	stripeClient       stripe.StripeService
 	productService     services.ProductService
 	priceService       services.PriceService
 	customerService    services.CustomerService
@@ -24,7 +24,7 @@ type CheckoutHandler struct {
 // NewCheckoutHandler creates a new checkout handler
 func NewCheckoutHandler(
 	logger *zerolog.Logger,
-	stripeClient *stripe.Client,
+	stripeClient stripe.StripeService,
 	productService services.ProductService,
 	priceService services.PriceService,
 	customerService services.CustomerService,

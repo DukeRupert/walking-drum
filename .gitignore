@@ -23,3 +23,10 @@ bin/
 
 # Log files
 *.log
+__debug*
+
+# Nodejs
+node_modules/
+
+# Svelte
+.svelte-kit/

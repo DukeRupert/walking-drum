@@ -27,12 +27,12 @@ type ProductService interface {
 // productService is the private implementation of ProductService
 type productService struct {
 	productRepo  interfaces.ProductRepository
-	stripeClient *stripe.Client
+	stripeClient stripe.StripeService
 	logger       zerolog.Logger
 }
 
 // NewProductService creates a new instance of ProductService
-func NewProductService(repo interfaces.ProductRepository, stripe *stripe.Client, logger *zerolog.Logger) ProductService {
+func NewProductService(repo interfaces.ProductRepository, stripe stripe.StripeService, logger *zerolog.Logger) ProductService {
 	return &productService{
 		productRepo:  repo,
 		stripeClient: stripe,
@@ -414,6 +414,7 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 
 	return existingProduct, nil
 }
+
 // Delete removes a product from the system
 func (s *productService) Delete(ctx context.Context, id uuid.UUID) error {
     s.logger.Debug().

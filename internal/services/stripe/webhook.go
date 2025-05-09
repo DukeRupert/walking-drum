@@ -9,7 +9,7 @@ import (
 )
 
 // ProcessWebhook handles incoming webhook events from Stripe
-func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, webhookSecret string) error {
+func (c *client) ProcessWebhook(ctx context.Context, payload []byte, signature, webhookSecret string) error {
 	// Verify the webhook signature
 	event, err := webhook.ConstructEvent(payload, signature, webhookSecret)
 	if err != nil {
@@ -254,121 +254,121 @@ func (c *Client) ProcessWebhook(ctx context.Context, payload []byte, signature, 
 
 // Handler implementations for each event category
 
-func (c *Client) handleChargeEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleChargeEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing charge event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleChargeDisputeEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleChargeDisputeEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing charge dispute event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleChargeRefundEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleChargeRefundEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing charge refund event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleCheckoutSessionEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleCheckoutSessionEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing checkout session event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleCustomerEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleCustomerEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleCustomerDiscountEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleCustomerDiscountEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer discount event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleCustomerSourceEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleCustomerSourceEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer source event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleCustomerTaxIdEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleCustomerTaxIdEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing customer tax ID event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleIdentityVerificationEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleIdentityVerificationEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing identity verification event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleInvoiceEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleInvoiceEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing invoice event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleInvoicePaymentSucceeded(ctx context.Context, event stripe.Event) error {
+func (c *client) handleInvoicePaymentSucceeded(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing invoice payment succeeded event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleInvoicePaymentFailed(ctx context.Context, event stripe.Event) error {
+func (c *client) handleInvoicePaymentFailed(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing invoice payment failed event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handlePaymentIntentEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handlePaymentIntentEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing payment intent event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handlePaymentMethodEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handlePaymentMethodEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing payment method event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handlePlanEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handlePlanEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing plan event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handlePriceEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handlePriceEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing price event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleProductEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleProductEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing product event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleRefundEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleRefundEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing refund event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleSubscriptionEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleSubscriptionEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing subscription event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleSubscriptionCreated(ctx context.Context, event stripe.Event) error {
+func (c *client) handleSubscriptionCreated(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription created event")
 
 	// Implementation for subscription created
@@ -379,7 +379,7 @@ func (c *Client) handleSubscriptionCreated(ctx context.Context, event stripe.Eve
 	return nil
 }
 
-func (c *Client) handleSubscriptionUpdated(ctx context.Context, event stripe.Event) error {
+func (c *client) handleSubscriptionUpdated(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription updated event")
 
 	// Implementation for subscription updated
@@ -390,7 +390,7 @@ func (c *Client) handleSubscriptionUpdated(ctx context.Context, event stripe.Eve
 	return nil
 }
 
-func (c *Client) handleSubscriptionDeleted(ctx context.Context, event stripe.Event) error {
+func (c *client) handleSubscriptionDeleted(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription deleted event")
 
 	// Implementation for subscription deleted
@@ -401,7 +401,7 @@ func (c *Client) handleSubscriptionDeleted(ctx context.Context, event stripe.Eve
 	return nil
 }
 
-func (c *Client) handleSubscriptionPaused(ctx context.Context, event stripe.Event) error {
+func (c *client) handleSubscriptionPaused(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription paused event")
 
 	// Implementation for subscription paused
@@ -412,7 +412,7 @@ func (c *Client) handleSubscriptionPaused(ctx context.Context, event stripe.Even
 	return nil
 }
 
-func (c *Client) handleSubscriptionResumed(ctx context.Context, event stripe.Event) error {
+func (c *client) handleSubscriptionResumed(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Msg("Processing subscription resumed event")
 
 	// Implementation for subscription resumed
@@ -423,19 +423,19 @@ func (c *Client) handleSubscriptionResumed(ctx context.Context, event stripe.Eve
 	return nil
 }
 
-func (c *Client) handleSubscriptionScheduleEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleSubscriptionScheduleEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing subscription schedule event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleTaxEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleTaxEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing tax event")
 	// Implementation details here
 	return nil
 }
 
-func (c *Client) handleTaxRateEvent(ctx context.Context, event stripe.Event) error {
+func (c *client) handleTaxRateEvent(ctx context.Context, event stripe.Event) error {
 	c.logger.Info().Str("event_id", event.ID).Str("type", string(event.Type)).Msg("Processing tax rate event")
 	// Implementation details here
 	return nil
