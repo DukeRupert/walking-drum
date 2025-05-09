@@ -32,7 +32,7 @@
 	</div>
 {:else}
 	<div class="products-container">
-		{#each products as product}
+		{#each products as product (product.id)}
 			<div class="product-card">
 				<div class="product-image">
 					<img
