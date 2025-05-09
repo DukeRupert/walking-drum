@@ -44,8 +44,6 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
-	logger.Debug().Msg("This message appears only when log level set to Debug")
-
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -53,7 +51,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	}
 
 	// Initialize database
-	db, err := postgres.Connect(cfg.DB)
+	db, err := postgres.Connect(cfg.DB, &logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to connect to database")
 	}

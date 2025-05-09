@@ -4,15 +4,42 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/dukerupert/walking-drum/internal/config"
 	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/rs/zerolog"
 )
 
 // Connect establishes a connection to the PostgreSQL database
-func Connect(dbConfig config.DBConfig) (*DB, error) {
+func Connect(dbConfig config.DBConfig, logger *zerolog.Logger) (*DB, error) {
+	// Initialize connection to PostgreSQL server (not a specific DB)
+	baseConnStr := fmt.Sprintf("host=%s port=%d user=%s password=%s sslmode=%s",
+		dbConfig.Host, dbConfig.Port, dbConfig.User, dbConfig.Password, dbConfig.SSLMode)
+
+	// Connect to 'postgres' default database first
+	baseDB, err := sql.Open("postgres", baseConnStr+" dbname=postgres")
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to connect to postgres database")
+	}
+	defer baseDB.Close()
+
+	// Check if our database exists
+	var exists bool
+	err = baseDB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", "coffee_subscriptions").Scan(&exists)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to check if database exists")
+	}
+
+	// Create the database if it doesn't exist
+	if !exists {
+		_, err = baseDB.Exec("CREATE DATABASE coffee_subscriptions")
+		if err != nil {
+			logger.Fatal().Err(err).Msg("Failed to create database")
+		}
+		logger.Info().Msg("Created database 'coffee_subscriptions'")
+	}
+	
 	// Create the database connection
 	db, err := sql.Open("postgres", dbConfig.DSN)
 	if err != nil {
@@ -29,9 +56,11 @@ func Connect(dbConfig config.DBConfig) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Printf("Connected to PostgreSQL database: %s", dbConfig.Name)
+	logger.Debug().Str("name", dbConfig.Name).Msg("Connected to PostgreSQL database")
 
-	return &DB{db}, nil
+	sublogger := logger.With().Str("component", "database").Logger()
+
+	return &DB{db, &sublogger}, nil
 }
 
 // Close closes the database connection pool
