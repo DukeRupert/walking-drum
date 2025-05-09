@@ -2,9 +2,12 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/joho/godotenv"
 )
@@ -110,14 +113,19 @@ func (c *Config) validate() error {
 	// In production, some values are required
 	if c.App.Env == "production" {
 		if c.Stripe.SecretKey == "" {
-			return fmt.Errorf("STRIPE_SECRET_KEY is required in production")
+			return errors.New("STRIPE_SECRET_KEY is required in production")
 		}
 		if c.Stripe.WebhookSecret == "" {
-			return fmt.Errorf("STRIPE_WEBHOOK_SECRET is required in production")
+			return errors.New("STRIPE_WEBHOOK_SECRET is required in production")
 		}
 		if c.JWT.Secret == "your_jwt_secret_key" {
-			return fmt.Errorf("JWT_SECRET must be changed in production")
+			return errors.New("JWT_SECRET must be changed in production")
 		}
+	}
+
+	// Verify that the provided database name is valid
+	valid, msg := isValidPostgresIdentifier(c.DB.Name); if !valid {
+		return fmt.Errorf("invalid database name '%s': %s", c.DB.Name, msg)
 	}
 
 	return nil
@@ -145,4 +153,84 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 		return value
 	}
 	return defaultValue
+}
+
+// IsValidPostgresIdentifier checks if the provided name is a valid PostgreSQL identifier
+// according to PostgreSQL naming rules.
+func isValidPostgresIdentifier(name string) (bool, string) {
+	// Handle empty name
+	if name == "" {
+		return false, "identifier cannot be empty"
+	}
+
+	// Check if the name is quoted
+	if strings.HasPrefix(name, "\"") && strings.HasSuffix(name, "\"") {
+		// For quoted identifiers, we need to:
+		// 1. Remove the surrounding quotes
+		// 2. Check for any embedded double quotes (they must be escaped as "")
+		// 3. Check if the resulting name is not empty
+		
+		// Remove surrounding quotes
+		unquotedName := name[1 : len(name)-1]
+		
+		// Check for proper escaping of embedded quotes
+		for i := 0; i < len(unquotedName); i++ {
+			if unquotedName[i] == '"' {
+				// If this is the last character or the next character is not a double quote
+				if i == len(unquotedName)-1 || unquotedName[i+1] != '"' {
+					return false, "embedded double quote in identifier must be escaped by doubling"
+				}
+				// Skip the next quote (the escape)
+				i++
+			}
+		}
+		
+		// Check if the unquoted name is empty
+		if len(unquotedName) == 0 {
+			return false, "quoted identifier cannot be empty"
+		}
+		
+		// Check length (after removing quotes and handling escaped quotes)
+		// Note: This is simplified; a proper implementation would count "" as a single character
+		if len(unquotedName) > 31 {
+			return false, "identifier too long (maximum is 31 characters)"
+		}
+		
+		return true, ""
+	}
+
+	// For unquoted identifiers
+	// Check if first character is a letter or underscore
+	if len(name) == 0 || (!unicode.IsLetter(rune(name[0])) && name[0] != '_') {
+		return false, "identifier must begin with a letter or underscore"
+	}
+	
+	// Check subsequent characters
+	for i := 1; i < len(name); i++ {
+		ch := rune(name[i])
+		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != '_' {
+			return false, fmt.Sprintf("identifier contains invalid character: %c", ch)
+		}
+	}
+	
+	// Check length
+	if len(name) > 31 {
+		return false, "identifier too long (maximum is 31 characters)"
+	}
+	
+	// Check if it's a reserved keyword (simplified - would need a comprehensive list)
+	keywords := map[string]bool{
+		"select": true, "from": true, "where": true, "insert": true,
+		"update": true, "delete": true, "create": true, "drop": true,
+		"table": true, "index": true, "view": true, "sequence": true,
+		"trigger": true, "function": true, "procedure": true, "schema": true,
+		"database": true, "in": true, "between": true, "like": true,
+		"and": true, "or": true, "not": true, "null": true, "true": true, "false": true,
+	}
+	
+	if keywords[strings.ToLower(name)] {
+		return false, fmt.Sprintf("%s is a reserved keyword", name)
+	}
+	
+	return true, ""
 }

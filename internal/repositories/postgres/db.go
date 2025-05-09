@@ -33,11 +33,11 @@ func Connect(dbConfig config.DBConfig, logger *zerolog.Logger) (*DB, error) {
 
 	// Create the database if it doesn't exist
 	if !exists {
-		_, err = baseDB.Exec("CREATE DATABASE coffee_subscriptions")
+		_, err = baseDB.Exec(fmt.Sprintf("CREATE DATABASE %s", dbConfig.Name))
 		if err != nil {
 			logger.Fatal().Err(err).Msg("Failed to create database")
 		}
-		logger.Info().Msg("Created database 'coffee_subscriptions'")
+		logger.Info().Msg(fmt.Sprintf("Created database %s", dbConfig.Name))
 	}
 	
 	// Create the database connection
