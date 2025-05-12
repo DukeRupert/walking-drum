@@ -27,7 +27,7 @@ curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v
 curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
   -H "Content-Type: application/json" \
   -d '{
-    "product_id": "cloud9-espresso",
+    "product_id": "d39a9a21-bfeb-4667-8a81-577a984530a2",
     "name": "Cloud 9 Espresso - 12oz (One-time)",
     "amount": 1800,
     "currency": "usd",
@@ -40,12 +40,13 @@ curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v
 curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
   -H "Content-Type: application/json" \
   -d '{
-    "product_id": "cloud9-espresso",
+    "product_id": "d39a9a21-bfeb-4667-8a81-577a984530a2",
     "name": "Cloud 9 Espresso - 12oz (Monthly Subscription)",
     "amount": 1620,
     "currency": "usd",
     "interval": "month",
     "interval_count": 1,
+    "type": "recurring",
     "active": true
   }'
 ```
@@ -54,11 +55,12 @@ curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v
 curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
   -H "Content-Type: application/json" \
   -d '{
-    "product_id": "cloud9-espresso",
+    "product_id": "d39a9a21-bfeb-4667-8a81-577a984530a2",
     "name": "Cloud 9 Espresso - 3lb (One-time)",
     "amount": 6480,
     "currency": "usd",
-    "interval": "one_time",
+    "type": "one_time",
+    "interval": "",
     "interval_count": 0,
     "active": true
   }'
@@ -68,10 +70,11 @@ curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v
 curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
   -H "Content-Type: application/json" \
   -d '{
-    "product_id": "cloud9-espresso",
+    "product_id": "d39a9a21-bfeb-4667-8a81-577a984530a2",
     "name": "Cloud 9 Espresso - 3lb (Monthly Subscription)",
     "amount": 5832,
     "currency": "usd",
+    "type": "recurring",
     "interval": "month",
     "interval_count": 1,
     "active": true

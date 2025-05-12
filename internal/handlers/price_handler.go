@@ -404,6 +404,7 @@ func (h *PriceHandler) List(c echo.Context) error {
         Name          string    `json:"name"`
         Amount        int64     `json:"amount"`
         Currency      string    `json:"currency"`
+        Type          string    `json:"type"`
         Interval      string    `json:"interval"`
         IntervalCount int       `json:"interval_count"`
         Active        bool      `json:"active"`
@@ -420,6 +421,7 @@ func (h *PriceHandler) List(c echo.Context) error {
             Name:          price.Name,
             Amount:        price.Amount,
             Currency:      price.Currency,
+            Type:          price.Type,
             Interval:      price.Interval,
             IntervalCount: price.IntervalCount,
             Active:        price.Active,
@@ -443,6 +445,7 @@ func (h *PriceHandler) List(c echo.Context) error {
                 Str("price_name", prices[i].Name).
                 Int64("amount", prices[i].Amount).
                 Str("currency", prices[i].Currency).
+                Str("type", prices[i].Type).
                 Str("interval", prices[i].Interval).
                 Msgf("Price %d/%d in results", i+1, logCount)
         }
