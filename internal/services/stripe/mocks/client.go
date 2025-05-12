@@ -63,6 +63,10 @@ func (m *Client) CreatePrice(ctx context.Context, params *stripe.PriceCreatePara
 	return price, args.Error(1)
 }
 
+func (m *Client) UpdatePrice(ctx context.Context, stripeID string, params *stripe.PriceUpdateParams) (*stripego.Price, error) {
+	return nil, nil
+}
+
 // ArchivePrice deactivates a price in Stripe
 func (m *Client) ArchivePrice(ctx context.Context, stripeID string) error {
 	return nil

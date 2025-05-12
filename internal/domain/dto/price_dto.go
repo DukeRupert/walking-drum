@@ -65,12 +65,35 @@ func (p *PriceCreateDTO) Valid(ctx context.Context) map[string]string {
 type PriceUpdateDTO struct {
 	Name          string `json:"name,omitempty"`
 	Active        *bool  `json:"active,omitempty"`
+	Type          string `json:"type,omitempty"`   // one_time|recurring
+	Interval      string `json:"interval,omitempty"`       // week|month|year (for recurring prices)
+	IntervalCount int    `json:"interval_count,omitempty"` // Number of intervals (for recurring prices)
 }
 
 // Valid validates the PriceUpdateDTO
 func (p *PriceUpdateDTO) Valid(ctx context.Context) map[string]string {
-	// Not much to validate here as most fields can't be updated once created in Stripe
-	return make(map[string]string)
+	problems := make(map[string]string)
+
+	// Validate type if provided
+	if p.Type != "" && p.Type != "one_time" && p.Type != "recurring" {
+		problems["type"] = "type must be 'one_time' or 'recurring'"
+	}
+
+	// If type is recurring and interval is provided, validate it
+	if p.Type == "recurring" && p.Interval != "" {
+		if p.Interval != "week" && p.Interval != "month" && p.Interval != "year" {
+			problems["interval"] = "interval must be 'week', 'month', or 'year'"
+		}
+	}
+
+	// If type is recurring and interval_count is provided, validate it
+	if p.Type == "recurring" && p.IntervalCount != 0 {
+		if p.IntervalCount <= 0 {
+			problems["interval_count"] = "interval count must be greater than 0 for recurring prices"
+		}
+	}
+	
+	return problems
 }
 
 // PriceResponseDTO represents the data returned to the client

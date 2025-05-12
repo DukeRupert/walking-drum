@@ -14,23 +14,21 @@ type StripeService interface {
 	// ProcessWebhook handles incoming webhook events from Stripe
 	ProcessWebhook(ctx context.Context, payload []byte, signature, webhookSecret string) error
 
-	// CreateProduct creates a new product in Stripe
+	// Product
 	CreateProduct(ctx context.Context, params *ProductCreateParams) (*stripe.Product, error)
-
 	ListProducts(ctx context.Context, limit int, active *bool) ([]*stripe.Product, error)
-
-	// ArchiveProduct archives a product in Stripe
+	UpdateProduct(ctx context.Context, p *models.Product) error
 	ArchiveProduct(ctx context.Context, productID string) error
 
-	// UpdateProduct updates an existing product in Stripe
-	UpdateProduct(ctx context.Context, p *models.Product) error
-
+	// Customer
 	CreateCustomer(ctx context.Context, params *CustomerCreateParams) (*stripe.Customer, error)
 
+	// Price
 	CreatePrice(ctx context.Context, params *PriceCreateParams) (*stripe.Price, error)
-
+	UpdatePrice(ctx context.Context, stripeID string, params *PriceUpdateParams) (*stripe.Price, error)
 	ArchivePrice(ctx context.Context, stripeID string) error
 
+	// Checkout
 	CreateEmbeddedCheckoutSession(
 		customerStripeID string,
 		priceStripeID string,

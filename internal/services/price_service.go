@@ -209,19 +209,6 @@ func (s *priceService) Create(ctx context.Context, priceDTO *dto.PriceCreateDTO)
     return price, nil
 }
 
-// Add this helper function
-func buildPriceMetadata(priceDTO *dto.PriceCreateDTO) map[string]string {
-    metadata := make(map[string]string)
-    
-    // Only add interval and interval_count if recurring type is "recurring"
-    if priceDTO.Type == "recurring" {
-        metadata["interval"] = priceDTO.Interval
-        metadata["interval_count"] = fmt.Sprintf("%d", priceDTO.IntervalCount)
-    }
-    
-    return metadata
-}
-
 // GetByID retrieves a price by its ID
 func (s *priceService) GetByID(ctx context.Context, id uuid.UUID) (*models.Price, error) {
     s.logger.Debug().
@@ -284,16 +271,23 @@ func (s *priceService) GetByID(ctx context.Context, id uuid.UUID) (*models.Price
             Msg("Retrieved associated product information")
     }
     
-    s.logger.Info().
+    // Create different log messages based on price type
+    logEvent := s.logger.Info().
         Str("function", "priceService.GetByID").
         Str("price_id", id.String()).
         Str("product_id", price.ProductID.String()).
         Str("name", price.Name).
         Int64("amount", price.Amount).
         Str("currency", price.Currency).
-        Str("interval", price.Interval).
-        Int("interval_count", price.IntervalCount).
-        Msg("Price successfully retrieved")
+        Str("type", price.Type)  // Added type field
+    
+    if price.Type == "recurring" {
+        logEvent = logEvent.
+            Str("interval", price.Interval).
+            Int("interval_count", price.IntervalCount)
+    }
+    
+    logEvent.Msg("Price successfully retrieved")
         
     return price, nil
 }
@@ -324,11 +318,25 @@ func (s *priceService) List(ctx context.Context, offset, limit int, includeInact
         return nil, 0, fmt.Errorf("failed to list prices: %w", err)
     }
     
-    // Log the result count
+    // Count price types for logging
+    oneTimePricesCount := 0
+    recurringPricesCount := 0
+    
+    for _, price := range prices {
+        if price.Type == "one_time" {
+            oneTimePricesCount++
+        } else if price.Type == "recurring" {
+            recurringPricesCount++
+        }
+    }
+    
+    // Log the result count with type breakdown
     s.logger.Debug().
         Str("function", "priceService.List").
         Int("prices_count", len(prices)).
         Int("total_count", total).
+        Int("one_time_prices", oneTimePricesCount).
+        Int("recurring_prices", recurringPricesCount).
         Msg("Successfully retrieved prices from repository")
     
     // Additional processing if needed (e.g., formatting, conversion)
@@ -337,6 +345,8 @@ func (s *priceService) List(ctx context.Context, offset, limit int, includeInact
         Str("function", "priceService.List").
         Int("total_prices", total).
         Int("returned_prices", len(prices)).
+        Int("one_time_prices", oneTimePricesCount).
+        Int("recurring_prices", recurringPricesCount).
         Int("offset", offset).
         Int("limit", limit).
         Bool("includeInactive", includeInactive).
@@ -378,10 +388,24 @@ func (s *priceService) ListByProductID(ctx context.Context, productID uuid.UUID,
         return nil, fmt.Errorf("failed to list prices for product %s: %w", productID, err)
     }
     
-    // Log the result count
+    // Count price types for logging
+    oneTimePricesCount := 0
+    recurringPricesCount := 0
+    
+    for _, price := range prices {
+        if price.Type == "one_time" {
+            oneTimePricesCount++
+        } else if price.Type == "recurring" {
+            recurringPricesCount++
+        }
+    }
+    
+    // Log the result count with type breakdown
     s.logger.Debug().
         Str("function", "priceService.ListByProductID").
         Int("prices_count", len(prices)).
+        Int("one_time_prices", oneTimePricesCount).
+        Int("recurring_prices", recurringPricesCount).
         Str("product_id", productID.String()).
         Msg("Successfully retrieved prices for product")
     
@@ -391,6 +415,8 @@ func (s *priceService) ListByProductID(ctx context.Context, productID uuid.UUID,
         Str("function", "priceService.ListByProductID").
         Str("product_id", productID.String()).
         Int("prices_count", len(prices)).
+        Int("one_time_prices", oneTimePricesCount).
+        Int("recurring_prices", recurringPricesCount).
         Bool("includeInactive", includeInactive).
         Msg("Price listing by product ID completed successfully")
         
@@ -399,13 +425,167 @@ func (s *priceService) ListByProductID(ctx context.Context, productID uuid.UUID,
 
 // Update updates an existing price
 func (s *priceService) Update(ctx context.Context, id uuid.UUID, priceDTO *dto.PriceUpdateDTO) (*models.Price, error) {
-	// TODO: Implement price update
-	// 1. Get existing price
-	// 2. Update fields from DTO
-	// 3. Update in Stripe
-	// 4. Update in database
-	// 5. Handle errors
-	return nil, nil
+    s.logger.Debug().
+        Str("function", "priceService.Update").
+        Str("price_id", id.String()).
+        Interface("priceDTO", priceDTO).
+        Msg("Starting price update")
+
+    // 1. Validate input parameters
+    if id == uuid.Nil {
+        s.logger.Error().
+            Str("function", "priceService.Update").
+            Msg("Nil UUID provided for price ID")
+        return nil, fmt.Errorf("invalid price ID: nil UUID")
+    }
+
+    if problems := priceDTO.Valid(ctx); len(problems) > 0 {
+        s.logger.Error().
+            Str("function", "priceService.Update").
+            Interface("problems", problems).
+            Msg("Price update validation failed")
+        return nil, fmt.Errorf("invalid price data: %v", problems)
+    }
+
+    // 2. Get existing price
+    s.logger.Debug().
+        Str("function", "priceService.Update").
+        Str("price_id", id.String()).
+        Msg("Retrieving existing price")
+        
+    existingPrice, err := s.priceRepo.GetByID(ctx, id)
+    if err != nil {
+        s.logger.Error().
+            Str("function", "priceService.Update").
+            Err(err).
+            Str("price_id", id.String()).
+            Msg("Failed to retrieve existing price")
+        return nil, fmt.Errorf("failed to retrieve existing price: %w", err)
+    }
+
+    if existingPrice == nil {
+        s.logger.Error().
+            Str("function", "priceService.Update").
+            Str("price_id", id.String()).
+            Msg("Price not found")
+        return nil, fmt.Errorf("price with ID %s not found", id)
+    }
+
+    // 3. Check if type is being changed, which may require special handling
+    typeChanged := priceDTO.Type != "" && priceDTO.Type != existingPrice.Type
+    if typeChanged {
+        s.logger.Info().
+            Str("function", "priceService.Update").
+            Str("price_id", id.String()).
+            Str("old_type", existingPrice.Type).
+            Str("new_type", priceDTO.Type).
+            Msg("Price type is being changed")
+    }
+
+    // 4. Update price fields from DTO
+    if priceDTO.Name != "" {
+        existingPrice.Name = priceDTO.Name
+    }
+    if priceDTO.Type != "" {
+        existingPrice.Type = priceDTO.Type
+    }
+    if priceDTO.Active != nil {
+        existingPrice.Active = *priceDTO.Active
+    }
+
+    // Update interval fields based on type
+    if existingPrice.Type == "recurring" {
+        if priceDTO.Interval != "" {
+            existingPrice.Interval = priceDTO.Interval
+        }
+        if priceDTO.IntervalCount > 0 {
+            existingPrice.IntervalCount = priceDTO.IntervalCount
+        }
+    } else if existingPrice.Type == "one_time" {
+        // Clear interval fields for one_time prices
+        existingPrice.Interval = ""
+        existingPrice.IntervalCount = 0
+    }
+
+    // 5. Update in Stripe first
+    s.logger.Debug().
+        Str("function", "priceService.Update").
+        Str("price_id", id.String()).
+        Str("stripe_id", existingPrice.StripeID).
+        Msg("Updating price in Stripe")
+
+    // Prepare Stripe update parameters
+    stripeParams := &stripe.PriceUpdateParams{
+        Nickname: &priceDTO.Name,
+        Active:   &existingPrice.Active,
+        Metadata: map[string]string{},
+    }
+
+    // Update metadata based on price type
+    if existingPrice.Type == "recurring" {
+        stripeParams.Metadata["interval"] = existingPrice.Interval
+        stripeParams.Metadata["interval_count"] = fmt.Sprintf("%d", existingPrice.IntervalCount)
+    }
+
+    // Call Stripe API to update price
+    updatedStripePrice, err := s.stripeClient.UpdatePrice(ctx, existingPrice.StripeID, stripeParams)
+    if err != nil {
+        s.logger.Error().
+            Str("function", "priceService.Update").
+            Err(err).
+            Str("price_id", id.String()).
+            Str("stripe_id", existingPrice.StripeID).
+            Msg("Failed to update price in Stripe")
+        return nil, fmt.Errorf("failed to update price in Stripe: %w", err)
+    }
+
+    s.logger.Debug().
+        Str("function", "priceService.Update").
+        Str("price_id", id.String()).
+        Str("stripe_id", updatedStripePrice.ID).
+        Msg("Successfully updated price in Stripe")
+
+    // 6. Update in database
+    existingPrice.UpdatedAt = time.Now()
+
+    s.logger.Debug().
+        Str("function", "priceService.Update").
+        Str("price_id", id.String()).
+        Msg("Updating price in database")
+
+    if err := s.priceRepo.Update(ctx, existingPrice); err != nil {
+        s.logger.Error().
+            Str("function", "priceService.Update").
+            Err(err).
+            Str("price_id", id.String()).
+            Msg("Failed to update price in database")
+        return nil, fmt.Errorf("failed to update price in database: %w", err)
+    }
+
+    // 7. Log success with appropriate fields based on price type
+    logEvent := s.logger.Info().
+        Str("function", "priceService.Update").
+        Str("price_id", existingPrice.ID.String()).
+        Str("stripe_id", existingPrice.StripeID).
+        Str("name", existingPrice.Name).
+        Int64("amount", existingPrice.Amount).
+        Str("currency", existingPrice.Currency).
+        Str("type", existingPrice.Type).
+        Bool("active", existingPrice.Active)
+
+    if existingPrice.Type == "recurring" {
+        logEvent = logEvent.
+            Str("interval", existingPrice.Interval).
+            Int("interval_count", existingPrice.IntervalCount)
+    }
+
+    if typeChanged {
+        logEvent = logEvent.Bool("type_changed", true)
+    }
+
+    logEvent.Msg("Price successfully updated")
+
+    return existingPrice, nil
 }
 
 // Delete removes a price from the system
