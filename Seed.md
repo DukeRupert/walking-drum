@@ -1,4 +1,6 @@
-## Create Product
+## Product
+
+### Create
 ```bash
 curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/products \
   -H "Content-Type: application/json" \
@@ -18,4 +20,60 @@ curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v
   }'
   ```
 
-  
+## Price
+
+### Create
+```bash
+curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "cloud9-espresso",
+    "name": "Cloud 9 Espresso - 12oz (One-time)",
+    "amount": 1800,
+    "currency": "usd",
+    "type": "one_time",
+    "active": true
+  }'
+```
+
+```bash
+curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "cloud9-espresso",
+    "name": "Cloud 9 Espresso - 12oz (Monthly Subscription)",
+    "amount": 1620,
+    "currency": "usd",
+    "interval": "month",
+    "interval_count": 1,
+    "active": true
+  }'
+```
+
+```bash
+curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "cloud9-espresso",
+    "name": "Cloud 9 Espresso - 3lb (One-time)",
+    "amount": 6480,
+    "currency": "usd",
+    "interval": "one_time",
+    "interval_count": 0,
+    "active": true
+  }'
+```
+
+```bash
+curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/prices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "cloud9-espresso",
+    "name": "Cloud 9 Espresso - 3lb (Monthly Subscription)",
+    "amount": 5832,
+    "currency": "usd",
+    "interval": "month",
+    "interval_count": 1,
+    "active": true
+  }'
+```

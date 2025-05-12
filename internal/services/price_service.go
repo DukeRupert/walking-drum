@@ -90,25 +90,33 @@ func (s *priceService) Create(ctx context.Context, priceDTO *dto.PriceCreateDTO)
         Str("stripe_product_id", product.StripeID).
         Int64("amount", priceDTO.Amount).
         Str("currency", priceDTO.Currency).
+        Str("price_type", priceDTO.Type).
         Msg("Creating price in Stripe")
-        
-    recurring := &stripe.RecurringParams{
-        Interval:      priceDTO.Interval,
-        IntervalCount: priceDTO.IntervalCount,
-    }
     
-    stripePrice, err := s.stripeClient.CreatePrice(ctx, &stripe.PriceCreateParams{
+    // Prepare Stripe price creation parameters
+    priceParams := &stripe.PriceCreateParams{
         ProductID:  product.StripeID,
         Currency:   priceDTO.Currency,
         UnitAmount: priceDTO.Amount,
         Nickname:   priceDTO.Name,
-        Recurring:  recurring,
         Active:     priceDTO.Active,
-        Metadata: map[string]string{
-            "interval":       priceDTO.Interval,
-            "interval_count": fmt.Sprintf("%d", priceDTO.IntervalCount),
-        },
-    })
+        Metadata:   map[string]string{},
+    }
+    
+    // Configure recurring or one-time price based on type
+    if priceDTO.Type == "recurring" {
+        priceParams.Recurring = &stripe.RecurringParams{
+            Interval:      priceDTO.Interval,
+            IntervalCount: priceDTO.IntervalCount,
+        }
+        
+        // Add interval metadata only for recurring prices
+        priceParams.Metadata["interval"] = priceDTO.Interval
+        priceParams.Metadata["interval_count"] = fmt.Sprintf("%d", priceDTO.IntervalCount)
+    }
+    // For "one_time", we don't need to set Recurring or interval metadata
+    
+    stripePrice, err := s.stripeClient.CreatePrice(ctx, priceParams)
     if err != nil {
         s.logger.Error().
             Str("function", "priceService.Create").
@@ -133,18 +141,28 @@ func (s *priceService) Create(ctx context.Context, priceDTO *dto.PriceCreateDTO)
         Name:          priceDTO.Name,
         Amount:        priceDTO.Amount,
         Currency:      priceDTO.Currency,
-        Interval:      priceDTO.Interval,
-        IntervalCount: priceDTO.IntervalCount,
+        Type:          priceDTO.Type,
         Active:        priceDTO.Active,
         StripeID:      stripePrice.ID,
         CreatedAt:     now,
         UpdatedAt:     now,
     }
     
+    // Only set interval fields for recurring prices
+    if priceDTO.Type == "recurring" {
+        price.Interval = priceDTO.Interval
+        price.IntervalCount = priceDTO.IntervalCount
+    } else {
+        // Ensure interval fields are zero values for one_time prices
+        price.Interval = ""
+        price.IntervalCount = 0
+    }
+    
     s.logger.Debug().
         Str("function", "priceService.Create").
         Str("price_id", price.ID.String()).
         Str("stripe_id", price.StripeID).
+        Str("type", price.Type).
         Msg("Preparing to save price to database")
 
     // 5. Save to database
@@ -184,10 +202,24 @@ func (s *priceService) Create(ctx context.Context, priceDTO *dto.PriceCreateDTO)
         Str("stripe_id", price.StripeID).
         Str("product_id", price.ProductID.String()).
         Str("name", price.Name).
+        Str("type", price.Type).
         Int64("amount", price.Amount).
         Msg("Price successfully created")
 
     return price, nil
+}
+
+// Add this helper function
+func buildPriceMetadata(priceDTO *dto.PriceCreateDTO) map[string]string {
+    metadata := make(map[string]string)
+    
+    // Only add interval and interval_count if recurring type is "recurring"
+    if priceDTO.Type == "recurring" {
+        metadata["interval"] = priceDTO.Interval
+        metadata["interval_count"] = fmt.Sprintf("%d", priceDTO.IntervalCount)
+    }
+    
+    return metadata
 }
 
 // GetByID retrieves a price by its ID
