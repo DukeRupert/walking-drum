@@ -751,13 +751,136 @@ func (s *variantService) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("failed to delete variant from database: %w", err)
 	}
 
-	// Not done yet...
+	s.logger.Info().
+		Str("function", "variantService.Delete").
+		Str("variant_id", id.String()).
+		Str("product_id", variant.ProductID.String()).
+		Str("weight", variant.Weight).
+		Str("grind", variant.Grind).
+		Msg("Variant successfully deleted")
+
 	return nil
 }
 
+// UpdateStockLevel updates the stock level of a variant
 func (s *variantService) UpdateStockLevel(ctx context.Context, id uuid.UUID, quantity int) error {
+	s.logger.Debug().
+		Str("function", "variantService.UpdateStockLevel").
+		Str("variant_id", id.String()).
+		Int("new_quantity", quantity).
+		Msg("Starting stock level update")
+
+	// 1. Validate inputs
+	if id == uuid.Nil {
+		s.logger.Error().
+			Str("function", "variantService.UpdateStockLevel").
+			Msg("Nil UUID provided for variant ID")
+		return fmt.Errorf("invalid variant ID: nil UUID")
+	}
+
+	if quantity < 0 {
+		s.logger.Error().
+			Str("function", "variantService.UpdateStockLevel").
+			Int("quantity", quantity).
+			Msg("Negative quantity provided")
+		return fmt.Errorf("stock level cannot be negative")
+	}
+
+	// 2. Get existing variant to verify it exists
+	s.logger.Debug().
+		Str("function", "variantService.UpdateStockLevel").
+		Str("variant_id", id.String()).
+		Msg("Retrieving existing variant")
+
+	existingVariant, err := s.variantRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.UpdateStockLevel").
+			Err(err).
+			Str("variant_id", id.String()).
+			Msg("Failed to retrieve existing variant")
+		return fmt.Errorf("failed to retrieve existing variant: %w", err)
+	}
+
+	if existingVariant == nil {
+		s.logger.Error().
+			Str("function", "variantService.UpdateStockLevel").
+			Str("variant_id", id.String()).
+			Msg("Variant not found")
+		return fmt.Errorf("variant with ID %s not found", id)
+	}
+
+	// Record the old stock level for logging
+	oldStockLevel := existingVariant.StockLevel
+
+	// 3. Update stock level in repository
+	s.logger.Debug().
+		Str("function", "variantService.UpdateStockLevel").
+		Str("variant_id", id.String()).
+		Int("old_stock", oldStockLevel).
+		Int("new_stock", quantity).
+		Msg("Updating stock level in repository")
+
+	err = s.variantRepo.UpdateStockLevel(ctx, id, quantity)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.UpdateStockLevel").
+			Err(err).
+			Str("variant_id", id.String()).
+			Int("quantity", quantity).
+			Msg("Failed to update stock level in repository")
+		return fmt.Errorf("failed to update stock level: %w", err)
+	}
+
+	// 4. Log warning if stock level is low
+	if quantity < 10 {
+		s.logger.Warn().
+			Str("function", "variantService.UpdateStockLevel").
+			Str("variant_id", id.String()).
+			Int("stock_level", quantity).
+			Msg("Variant now has low stock level")
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.UpdateStockLevel").
+		Str("variant_id", id.String()).
+		Int("old_stock", oldStockLevel).
+		Int("new_stock", quantity).
+		Int("difference", quantity-oldStockLevel).
+		Msg("Stock level updated successfully")
+
 	return nil
 }
+
+// GetAvailableOptions returns the available weight and grind options for variants
 func (s *variantService) GetAvailableOptions() (*dto.VariantOptionsResponse, error) {
-	return nil, nil
+	s.logger.Debug().
+		Str("function", "variantService.GetAvailableOptions").
+		Msg("Getting available variant options")
+
+	// Convert model option types to string slices
+	weightOptions := make([]string, 0, len(models.GetWeightOptions()))
+	for _, option := range models.GetWeightOptions() {
+		weightOptions = append(weightOptions, string(option))
+	}
+
+	grindOptions := make([]string, 0, len(models.GetGrindOptions()))
+	for _, option := range models.GetGrindOptions() {
+		grindOptions = append(grindOptions, string(option))
+	}
+
+	options := &dto.VariantOptionsResponse{
+		Weights: weightOptions,
+		Grinds:  grindOptions,
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.GetAvailableOptions").
+		Int("weight_options_count", len(weightOptions)).
+		Int("grind_options_count", len(grindOptions)).
+		Strs("weights", weightOptions).
+		Strs("grinds", grindOptions).
+		Msg("Available variant options retrieved successfully")
+
+	return options, nil
 }
