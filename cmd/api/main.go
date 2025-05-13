@@ -121,6 +121,7 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 		repos.Product,
 		repos.Price,
 		stripeClient,
+		&logger,
 	)
 
 	// Initialize handlers

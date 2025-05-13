@@ -48,8 +48,8 @@ func (r *SubscriptionRepository) Create(ctx context.Context, subscription *model
 	`
 
 	var cancelledAt interface{}
-	if subscription.CancelledAt != nil {
-		cancelledAt = *subscription.CancelledAt
+	if subscription.CanceledAt != nil {
+		cancelledAt = *subscription.CanceledAt
 	} else {
 		cancelledAt = nil
 	}
@@ -119,7 +119,7 @@ func (r *SubscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 	}
 
 	if cancelledAt.Valid {
-		subscription.CancelledAt = &cancelledAt.Time
+		subscription.CanceledAt = &cancelledAt.Time
 	}
 
 	return &subscription, nil
@@ -164,7 +164,7 @@ func (r *SubscriptionRepository) GetByStripeID(ctx context.Context, stripeID str
 	}
 
 	if cancelledAt.Valid {
-		subscription.CancelledAt = &cancelledAt.Time
+		subscription.CanceledAt = &cancelledAt.Time
 	}
 
 	return &subscription, nil
@@ -228,7 +228,7 @@ func (r *SubscriptionRepository) List(ctx context.Context, offset, limit int) ([
 		}
 
 		if cancelledAt.Valid {
-			subscription.CancelledAt = &cancelledAt.Time
+			subscription.CanceledAt = &cancelledAt.Time
 		}
 
 		subscriptions = append(subscriptions, &subscription)
@@ -285,7 +285,7 @@ func (r *SubscriptionRepository) ListByCustomerID(ctx context.Context, customerI
 		}
 
 		if cancelledAt.Valid {
-			subscription.CancelledAt = &cancelledAt.Time
+			subscription.CanceledAt = &cancelledAt.Time
 		}
 
 		subscriptions = append(subscriptions, &subscription)
@@ -342,7 +342,7 @@ func (r *SubscriptionRepository) ListActiveByCustomerID(ctx context.Context, cus
 		}
 
 		if cancelledAt.Valid {
-			subscription.CancelledAt = &cancelledAt.Time
+			subscription.CanceledAt = &cancelledAt.Time
 		}
 
 		subscriptions = append(subscriptions, &subscription)
@@ -414,7 +414,7 @@ func (r *SubscriptionRepository) ListByStatus(ctx context.Context, status string
 		}
 
 		if cancelledAt.Valid {
-			subscription.CancelledAt = &cancelledAt.Time
+			subscription.CanceledAt = &cancelledAt.Time
 		}
 
 		subscriptions = append(subscriptions, &subscription)
@@ -471,7 +471,7 @@ func (r *SubscriptionRepository) ListDueForRenewal(ctx context.Context, before t
 		}
 
 		if cancelledAt.Valid {
-			subscription.CancelledAt = &cancelledAt.Time
+			subscription.CanceledAt = &cancelledAt.Time
 		}
 
 		subscriptions = append(subscriptions, &subscription)
@@ -506,8 +506,8 @@ func (r *SubscriptionRepository) Update(ctx context.Context, subscription *model
 	`
 
 	var cancelledAt interface{}
-	if subscription.CancelledAt != nil {
-		cancelledAt = *subscription.CancelledAt
+	if subscription.CanceledAt != nil {
+		cancelledAt = *subscription.CanceledAt
 	} else {
 		cancelledAt = nil
 	}
@@ -571,7 +571,7 @@ func (r *SubscriptionRepository) UpdateStatus(ctx context.Context, id uuid.UUID,
 	}
 
 	// If cancelling, set the cancelled_at timestamp
-	if status == models.SubscriptionStatusCancelled {
+	if status == models.SubscriptionStatusCanceled {
 		cancelQuery := `
 			UPDATE subscriptions SET
 				cancelled_at = $1
@@ -776,7 +776,7 @@ func (r *SubscriptionRepository) GetWithRelatedData(ctx context.Context, id uuid
 	}
 
 	if cancelledAt.Valid {
-		subscription.CancelledAt = &cancelledAt.Time
+		subscription.CanceledAt = &cancelledAt.Time
 	}
 
 	return &subscription, &product, &price, &customer, &address, nil

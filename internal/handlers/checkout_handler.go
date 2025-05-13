@@ -3,16 +3,16 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/dukerupert/walking-drum/internal/services/stripe"
 
-    gostripe "github.com/stripe/stripe-go/v82"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
+	gostripe "github.com/stripe/stripe-go/v82"
 )
 
 // CheckoutHandler handles checkout-related requests
@@ -492,53 +492,167 @@ func (h *CheckoutHandler) VerifyMultiItemSession(c echo.Context) error {
 		})
 	}
 
-	// Extract subscription details
-	subscriptionItems := []map[string]interface{}{}
-
-	// In a production environment, you'd query your database for the actual subscription details
-	// using the Stripe subscription ID and/or the metadata from the session.
-	// This is a simplified version for demonstration purposes.
-
-	// Extract product information from metadata
-	productCount := 0
-	for key := range session.Metadata {
-		if strings.HasPrefix(key, "product_") && strings.HasSuffix(key, "_name") {
-			productCount++
-		}
-	}
-
-	// Create sample subscription items (in production, get these from your database)
-	for i := 0; i < productCount; i++ {
-		productName := session.Metadata[fmt.Sprintf("product_%d_name", i)]
-		subscriptionItems = append(subscriptionItems, map[string]interface{}{
-			"id":                fmt.Sprintf("sub_item_%d", i+1),
-			"product_name":      productName,
-			"amount":            session.AmountTotal / int64(productCount), // Simplified division
-			"currency":          session.Currency,
-			"interval":          "week", // In production, fetch this from DB
-			"quantity":          1,      // In production, fetch this from DB
-			"next_delivery_date": time.Now().AddDate(0, 0, 7).Format(time.RFC3339),
+	// Get customer ID from session
+	customerStripeID := session.Customer.ID
+	if customerStripeID == "" {
+		h.logger.Error().Str("sessionID", sessionID).Msg("Session has no customer ID")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Invalid session data",
 		})
 	}
 
-	// If no products were found in metadata, create a default subscription item
-	if len(subscriptionItems) == 0 {
+	// Find customer in our database by Stripe ID
+	customer, err := h.customerService.GetByStripeID(c.Request().Context(), customerStripeID)
+	if err != nil {
+		h.logger.Error().Err(err).Str("customerStripeID", customerStripeID).Msg("Failed to find customer by Stripe ID")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to retrieve customer details",
+		})
+	}
+
+	if customer == nil {
+		h.logger.Error().Str("customerStripeID", customerStripeID).Msg("Customer not found")
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "Customer not found",
+		})
+	}
+
+	// Get Stripe subscription ID from session
+	var stripeSubscriptionID string
+	if session.Subscription != nil {
+		stripeSubscriptionID = session.Subscription.ID
+	}
+
+	if stripeSubscriptionID == "" {
+		h.logger.Error().Str("sessionID", sessionID).Msg("Session has no subscription ID")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "No subscription found in session",
+		})
+	}
+
+	// Get subscription details from Stripe
+	stripeSubscription, err := h.stripeClient.RetrieveSubscription(stripeSubscriptionID)
+	if err != nil {
+		h.logger.Error().Err(err).Str("subscriptionID", stripeSubscriptionID).Msg("Failed to retrieve subscription from Stripe")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to retrieve subscription details",
+		})
+	}
+
+	// Extract line items from subscription
+	subscriptionItems := []map[string]interface{}{}
+
+	// Process each subscription item
+for _, item := range stripeSubscription.Items.Data {
+	// Get price details from database
+	priceStripeID := item.Price.ID
+	
+	// Get price from database by Stripe ID
+	price, err := h.priceService.GetByStripeID(c.Request().Context(), priceStripeID)
+	if err != nil || price == nil {
+		h.logger.Error().Err(err).Str("priceStripeID", priceStripeID).Msg("Failed to get price by Stripe ID")
+		continue // Skip this item
+	}
+
+	// Get product details
+	product, err := h.productService.GetByID(c.Request().Context(), price.ProductID)
+	if err != nil || product == nil {
+		h.logger.Error().Err(err).Str("productID", price.ProductID.String()).Msg("Failed to get product")
+		continue
+	}
+
+	// Calculate next delivery date based on the subscription period
+	startTime := time.Unix(stripeSubscription.Schedule.CurrentPhase.StartDate, 0)
+	endTime := time.Unix(stripeSubscription.Schedule.CurrentPhase.EndDate, 0)
+	nextDelivery := calculateNextDeliveryDate(startTime, price.Interval, price.IntervalCount)
+
+	// Prepare subscription data using the DTO
+	subscriptionDTO := &dto.SubscriptionCreateDTO{
+		CustomerID:         customer.ID,
+		ProductID:          product.ID,
+		PriceID:            price.ID,
+		StripeID:           stripeSubscription.ID,
+		StripeItemID:       item.ID,
+		Status:             string(stripeSubscription.Status),
+		Quantity:           int(item.Quantity),
+		CurrentPeriodStart: startTime,
+		CurrentPeriodEnd:   endTime,
+		NextDeliveryDate:   nextDelivery,
+		Metadata: map[string]string{
+			"product_name": product.Name,
+			"price_name":   price.Name,
+		},
+	}
+
+	// Validate the DTO
+	if problems := subscriptionDTO.Valid(c.Request().Context()); len(problems) > 0 {
+		h.logger.Error().Interface("problems", problems).Msg("Invalid subscription data")
+		continue
+	}
+
+	// Convert DTO to subscription model
+	newSubscription := subscriptionDTO.ToSubscription()
+
+	// Save to database
+	_, err = h.subscriptionService.Create(c.Request().Context(), newSubscription)
+	if err != nil {
+		h.logger.Error().Err(err).Interface("subscription", newSubscription).Msg("Failed to create subscription")
+	} else {
+		h.logger.Info().Str("subscriptionID", newSubscription.ID.String()).Msg("Created new subscription")
 		subscriptionItems = append(subscriptionItems, map[string]interface{}{
-			"id":                session.ID,
-			"product_name":      "Coffee Subscription",
-			"amount":            session.AmountTotal,
-			"currency":          session.Currency,
-			"interval":          "week",
-			"quantity":          1,
-			"next_delivery_date": time.Now().AddDate(0, 0, 7).Format(time.RFC3339),
+			"id":                 newSubscription.ID.String(),
+			"product_id":         product.ID.String(),
+			"product_name":       product.Name,
+			"price_id":           price.ID.String(),
+			"amount":             price.Amount,
+			"currency":           price.Currency,
+			"interval":           price.Interval,
+			"interval_count":     price.IntervalCount,
+			"quantity":           item.Quantity,
+			"current_period_start": startTime.Format(time.RFC3339),
+			"current_period_end":   endTime.Format(time.RFC3339),
+			"next_delivery_date":   nextDelivery.Format(time.RFC3339),
+			"status":               stripeSubscription.Status,
+		})
+	}
+}
+	// If no items were processed successfully, return an error
+	if len(subscriptionItems) == 0 {
+		h.logger.Error().Str("subscriptionID", stripeSubscriptionID).Msg("No valid subscription items found")
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Unable to process subscription details",
 		})
 	}
 
 	// Return the subscription details
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"status":       session.Status,
+		"status":        session.Status,
+		"payment_status": session.PaymentStatus,
 		"subscriptions": subscriptionItems,
 	})
+}
+
+// calculateNextDeliveryDate calculates the next delivery date based on the subscription interval
+func calculateNextDeliveryDate(start time.Time, interval string, intervalCount int) time.Time {
+	// Default to 7 days from now if we can't determine
+	if interval == "" || intervalCount <= 0 {
+		return time.Now().AddDate(0, 0, 7)
+	}
+
+	// Calculate based on interval
+	switch interval {
+	case "day":
+		return start.AddDate(0, 0, intervalCount)
+	case "week":
+		return start.AddDate(0, 0, 7*intervalCount)
+	case "month":
+		return start.AddDate(0, intervalCount, 0)
+	case "year":
+		return start.AddDate(intervalCount, 0, 0)
+	default:
+		// Default to one week if unknown interval
+		return start.AddDate(0, 0, 7)
+	}
 }
 
 // Register registers the checkout handler routes

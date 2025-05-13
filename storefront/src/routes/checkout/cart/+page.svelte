@@ -1,18 +1,16 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart';
-	import { createMultipleItemCheckoutSession } from '$lib/services/stripe';
 	import { PUBLIC_STRIPE_KEY } from '$env/static/public';
 	import type { PageProps } from './$types';
 	import type { Stripe, StripeEmbeddedCheckout } from '@stripe/stripe-js';
 
 	let { data }: PageProps = $props();
-	let { customer, error } = $derived(data);
+	let { customer, clientSecret, error } = $derived(data);
 
 	let loading = $state(false);
-	let checkoutError: string | null = $state(null);
-	let clientSecret: string | null = $state(null);
+	let checkoutError: string | null = $state(error || null);
 	let stripe: Stripe | null;
 	let checkout: StripeEmbeddedCheckout | null;
 
@@ -27,33 +25,19 @@
 	}
 
 	onMount(async () => {
-		// If cart is empty, redirect to products page
-		if ($cart.items.length === 0) {
-			goto('/products');
-			return;
-		}
-
 		// Load Stripe.js
-		const { loadStripe } = await import('@stripe/stripe-js');
-		stripe = await loadStripe(PUBLIC_STRIPE_KEY);
-
-		if (!stripe) {
-			checkoutError = 'Failed to load Stripe';
-			return;
-		}
-
-		// Create a checkout session for multiple items
 		try {
 			loading = true;
-			const items = $cart.items.map(item => ({
-				price_id: item.priceId,
-				quantity: item.quantity
-			}));
+			
+			const { loadStripe } = await import('@stripe/stripe-js');
+			stripe = await loadStripe(PUBLIC_STRIPE_KEY);
 
-			const response = await createMultipleItemCheckoutSession(items, customer?.id ?? '');
-			clientSecret = response.client_secret;
+			if (!stripe) {
+				checkoutError = 'Failed to load Stripe';
+				return;
+			}
 
-			// Initialize the embedded checkout
+			// Initialize the embedded checkout if we have a client secret
 			if (clientSecret) {
 				checkout = await stripe.initEmbeddedCheckout({
 					clientSecret
@@ -70,23 +54,28 @@
 	});
 
 	// Clean up checkout on component unmount
-	function handleUnmount() {
+	onDestroy(() => {
 		if (checkout) {
 			checkout.destroy();
 		}
-	}
+	});
 
 	// Remove an item from cart
 	function removeItem(priceId: string) {
 		cart.removeItem(priceId);
 		if ($cart.items.length === 0) {
 			goto('/products');
+		} else {
+			// Reload the page to get a new checkout session
+			window.location.reload();
 		}
 	}
 
 	// Update quantity of an item
 	function updateQuantity(priceId: string, quantity: number) {
 		cart.updateQuantity(priceId, quantity);
+		// Reload the page to get a new checkout session
+		window.location.reload();
 	}
 </script>
 
@@ -99,7 +88,9 @@
 	</script>
 </svelte:head>
 
-<svelte:window on:unmount-checkout={handleUnmount} />
+<svelte:window on:unmount-checkout={() => {
+	if (checkout) checkout.destroy();
+}} />
 
 <div class="checkout-page">
 	<div class="checkout-header">

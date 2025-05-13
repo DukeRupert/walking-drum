@@ -18,6 +18,7 @@ import (
 type PriceService interface {
 	Create(ctx context.Context, priceDTO *dto.PriceCreateDTO) (*models.Price, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Price, error)
+    GetByStripeID(ctx context.Context, stripeID string) (*models.Price, error)
 	List(ctx context.Context, page, pageSize int, includeInactive bool) ([]*models.Price, int, error)
 	ListByProductID(ctx context.Context, productID uuid.UUID, includeInactive bool) ([]*models.Price, error)
 	Update(ctx context.Context, id uuid.UUID, priceDTO *dto.PriceUpdateDTO) (*models.Price, error)
@@ -289,6 +290,54 @@ func (s *priceService) GetByID(ctx context.Context, id uuid.UUID) (*models.Price
     
     logEvent.Msg("Price successfully retrieved")
         
+    return price, nil
+}
+
+// GetByStripeID retrieves a price by its Stripe ID
+func (s *priceService) GetByStripeID(ctx context.Context, stripeID string) (*models.Price, error) {
+    // Add debug logging
+    s.logger.Debug().
+        Str("function", "priceService.GetByStripeID").
+        Str("stripe_id", stripeID).
+        Msg("Starting price retrieval by Stripe ID")
+
+    // Validate input
+    if stripeID == "" {
+        s.logger.Error().
+            Str("function", "priceService.GetByStripeID").
+            Msg("Stripe ID is empty")
+        return nil, fmt.Errorf("stripe ID cannot be empty")
+    }
+
+    // Call repository to fetch price
+    price, err := s.priceRepo.GetByStripeID(ctx, stripeID)
+    if err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("function", "priceService.GetByStripeID").
+            Str("stripe_id", stripeID).
+            Msg("Error retrieving price from repository")
+        return nil, fmt.Errorf("failed to retrieve price by Stripe ID: %w", err)
+    }
+
+    // Check if price was found
+    if price == nil {
+        s.logger.Warn().
+            Str("function", "priceService.GetByStripeID").
+            Str("stripe_id", stripeID).
+            Msg("Price not found with the given Stripe ID")
+        return nil, nil
+    }
+
+    // Log success
+    s.logger.Info().
+        Str("function", "priceService.GetByStripeID").
+        Str("price_id", price.ID.String()).
+        Str("product_id", price.ProductID.String()).
+        Str("name", price.Name).
+        Str("stripe_id", price.StripeID).
+        Msg("Price successfully retrieved by Stripe ID")
+
     return price, nil
 }
 

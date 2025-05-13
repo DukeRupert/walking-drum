@@ -3,17 +3,27 @@ package dto
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/dukerupert/walking-drum/internal/domain/models"
 )
 
 // SubscriptionCreateDTO represents the data needed to create a new subscription
 type SubscriptionCreateDTO struct {
-	CustomerID uuid.UUID `json:"customer_id"`
-	ProductID  uuid.UUID `json:"product_id"`
-	PriceID    uuid.UUID `json:"price_id"`
-	AddressID  uuid.UUID `json:"address_id"`
-	Quantity   int       `json:"quantity"`
+	CustomerID         uuid.UUID            `json:"customer_id"`
+	ProductID          uuid.UUID            `json:"product_id"`
+	PriceID            uuid.UUID            `json:"price_id"`
+	AddressID          *uuid.UUID           `json:"address_id,omitempty"` // Optional
+	StripeID           string               `json:"stripe_id"`
+	StripeItemID       string               `json:"stripe_item_id"`
+	Status             string               `json:"status"`
+	Quantity           int                  `json:"quantity"`
+	CurrentPeriodStart time.Time            `json:"current_period_start"`
+	CurrentPeriodEnd   time.Time            `json:"current_period_end"`
+	NextDeliveryDate   time.Time            `json:"next_delivery_date"`
+	Metadata           map[string]string    `json:"metadata,omitempty"`
 }
 
 // Valid validates the SubscriptionCreateDTO
@@ -32,15 +42,82 @@ func (s *SubscriptionCreateDTO) Valid(ctx context.Context) map[string]string {
 		problems["price_id"] = "price ID is required"
 	}
 
-	if s.AddressID == uuid.Nil {
-		problems["address_id"] = "address ID is required"
+	// AddressID is optional, so no validation needed
+
+	if s.StripeID == "" {
+		problems["stripe_id"] = "Stripe subscription ID is required"
+	}
+
+	if s.StripeItemID == "" {
+		problems["stripe_item_id"] = "Stripe subscription item ID is required"
+	}
+
+	if s.Status == "" {
+		problems["status"] = "status is required"
+	} else if !isValidSubscriptionStatus(s.Status) {
+		problems["status"] = "invalid subscription status"
 	}
 
 	if s.Quantity <= 0 {
 		problems["quantity"] = "quantity must be greater than 0"
 	}
 
+	if s.CurrentPeriodStart.IsZero() {
+		problems["current_period_start"] = "current period start is required"
+	}
+
+	if s.CurrentPeriodEnd.IsZero() {
+		problems["current_period_end"] = "current period end is required"
+	}
+
+	if s.NextDeliveryDate.IsZero() {
+		problems["next_delivery_date"] = "next delivery date is required"
+	}
+
 	return problems
+}
+
+// ToSubscription converts the DTO to a Subscription model
+func (s *SubscriptionCreateDTO) ToSubscription() *models.Subscription {
+	return &models.Subscription{
+		ID:                 uuid.New(),
+		CustomerID:         s.CustomerID,
+		ProductID:          s.ProductID,
+		PriceID:            s.PriceID,
+		AddressID:          s.AddressID,
+		StripeID:           s.StripeID,
+		StripeItemID:       s.StripeItemID,
+		Status:             s.Status,
+		Quantity:           s.Quantity,
+		CurrentPeriodStart: s.CurrentPeriodStart,
+		CurrentPeriodEnd:   s.CurrentPeriodEnd,
+		NextDeliveryDate:   s.NextDeliveryDate,
+		Metadata:           s.Metadata,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+}
+
+// isValidSubscriptionStatus checks if the status is a valid subscription status
+func isValidSubscriptionStatus(status string) bool {
+	validStatuses := []string{
+		"active",
+		"past_due",
+		"incomplete",
+		"incomplete_expired",
+		"trialing",
+		"canceled",
+		"unpaid",
+		"paused",
+	}
+
+	for _, validStatus := range validStatuses {
+		if status == validStatus {
+			return true
+		}
+	}
+
+	return false
 }
 
 // SubscriptionUpdateDTO represents the data that can be updated for a subscription

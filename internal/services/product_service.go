@@ -521,9 +521,69 @@ func (s *productService) Delete(ctx context.Context, id uuid.UUID) error {
     return nil
 }
 
-// UpdateStockLevel updates the stock level of a product
+// UpdateStockLevel updates the stock level of a product (simplified version)
 func (s *productService) UpdateStockLevel(ctx context.Context, id uuid.UUID, quantity int) error {
-	// TODO: Implement stock level update
-	// 1. Call repository to update stock level
+	// Get request ID from context if available
+	var requestID string
+	if reqID, ok := ctx.Value("request_id").(string); ok {
+		requestID = reqID
+	}
+
+	s.logger.Debug().
+		Str("service", "ProductService.UpdateStockLevel").
+		Str("request_id", requestID).
+		Str("product_id", id.String()).
+		Int("new_quantity", quantity).
+		Msg("Starting stock level update")
+
+	// 1. Get existing product
+	existingProduct, err := s.productRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("service", "ProductService.UpdateStockLevel").
+			Str("request_id", requestID).
+			Str("product_id", id.String()).
+			Msg("Error retrieving product for stock update")
+		return fmt.Errorf("error retrieving product: %w", err)
+	}
+
+	if existingProduct == nil {
+		s.logger.Error().
+			Str("service", "ProductService.UpdateStockLevel").
+			Str("request_id", requestID).
+			Str("product_id", id.String()).
+			Msg("Product not found")
+		return fmt.Errorf("product not found with id: %s", id)
+	}
+
+	// Record the old stock level for logging
+	oldStockLevel := existingProduct.StockLevel
+
+	// 2. Update stock level
+	existingProduct.StockLevel = quantity
+	existingProduct.UpdatedAt = time.Now()
+
+	// 3. Update in database
+	err = s.productRepo.Update(ctx, existingProduct)
+	if err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("service", "ProductService.UpdateStockLevel").
+			Str("request_id", requestID).
+			Str("product_id", id.String()).
+			Msg("Error updating product stock in database")
+		return fmt.Errorf("error updating product stock in database: %w", err)
+	}
+
+	s.logger.Info().
+		Str("service", "ProductService.UpdateStockLevel").
+		Str("request_id", requestID).
+		Str("product_id", id.String()).
+		Str("product_name", existingProduct.Name).
+		Int("old_stock", oldStockLevel).
+		Int("new_stock", quantity).
+		Msg("Successfully updated product stock level")
+
 	return nil
 }

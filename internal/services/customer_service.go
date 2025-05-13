@@ -19,6 +19,7 @@ import (
 type CustomerService interface {
 	Create(ctx context.Context, customerDTO *dto.CustomerCreateDTO) (*models.Customer, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Customer, error)
+    GetByStripeID(ctx context.Context, stripeID string) (*models.Customer, error)
 	GetByEmail(ctx context.Context, email string) (*models.Customer, error)
 	List(ctx context.Context, page, pageSize int, includeInactive bool) ([]*models.Customer, int, error)
 	Update(ctx context.Context, id uuid.UUID, customerDTO *dto.CustomerUpdateDTO) (*models.Customer, error)
@@ -226,6 +227,53 @@ func (s *customerService) GetByID(ctx context.Context, id uuid.UUID) (*models.Cu
         Str("email", customer.Email).
         Str("stripe_id", customer.StripeID).
         Msg("Customer successfully retrieved")
+
+    return customer, nil
+}
+
+// GetByStripeID retrieves a customer by its Stripe ID
+func (s *customerService) GetByStripeID(ctx context.Context, stripeID string) (*models.Customer, error) {
+    // Add debug logging
+    s.logger.Debug().
+        Str("function", "customerService.GetByStripeID").
+        Str("stripe_id", stripeID).
+        Msg("Starting customer retrieval by Stripe ID")
+
+    // Validate input
+    if stripeID == "" {
+        s.logger.Error().
+            Str("function", "customerService.GetByStripeID").
+            Msg("Stripe ID is empty")
+        return nil, fmt.Errorf("stripe ID cannot be empty")
+    }
+
+    // 1. Call repository to fetch customer
+    customer, err := s.customerRepo.GetByStripeID(ctx, stripeID)
+    if err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("function", "customerService.GetByStripeID").
+            Str("stripe_id", stripeID).
+            Msg("Error retrieving customer from repository")
+        return nil, fmt.Errorf("failed to retrieve customer by Stripe ID: %w", err)
+    }
+
+    // Check if customer was found
+    if customer == nil {
+        s.logger.Warn().
+            Str("function", "customerService.GetByStripeID").
+            Str("stripe_id", stripeID).
+            Msg("Customer not found with the given Stripe ID")
+        return nil, nil
+    }
+
+    // Log success
+    s.logger.Info().
+        Str("function", "customerService.GetByStripeID").
+        Str("customer_id", customer.ID.String()).
+        Str("email", customer.Email).
+        Str("stripe_id", customer.StripeID).
+        Msg("Customer successfully retrieved by Stripe ID")
 
     return customer, nil
 }

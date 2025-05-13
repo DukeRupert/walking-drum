@@ -28,6 +28,9 @@ type StripeService interface {
 	UpdatePrice(ctx context.Context, stripeID string, params *PriceUpdateParams) (*stripe.Price, error)
 	ArchivePrice(ctx context.Context, stripeID string) error
 
+	// Subscription
+	RetrieveSubscription(subscriptionID string) (*stripe.Subscription, error)
+
 	// Checkout
 	CreateEmbeddedCheckoutSession(customerStripeID, priceStripeID, productName string, quantity int, returnURL string) (*stripe.CheckoutSession, error)
 	CreateMultiItemCheckoutSession(customerStripeID string, items []CheckoutItem, metadata map[string]string, returnURL string) (*stripe.CheckoutSession, error)

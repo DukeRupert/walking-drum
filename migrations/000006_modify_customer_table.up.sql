@@ -1,5 +1,0 @@
-ALTER TABLE customers DROP COLUMN name;
-ALTER TABLE customers ADD COLUMN first_name VARCHAR(100) NOT NULL;
-ALTER TABLE customers ADD COLUMN last_name VARCHAR(100) NOT NULL;
-ALTER TABLE customers RENAME COLUMN phone TO phone_number;
-ALTER TABLE customers ADD COLUMN active BOOLEAN DEFAULT TRUE;
