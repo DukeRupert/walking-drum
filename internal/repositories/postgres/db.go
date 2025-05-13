@@ -44,7 +44,7 @@ func Close(db *DB) error {
 }
 
 // Connect establishes a connection to the PostgreSQL database
-func Connect(dbConfig config.DBConfig, logger *zerolog.Logger) (*DB, error) {
+func  Connect(dbConfig config.DBConfig, logger *zerolog.Logger) (*DB, error) {
 	// Initialize connection to PostgreSQL server (not a specific DB)
 	baseConnStr := fmt.Sprintf("host=%s port=%d user=%s password=%s sslmode=%s",
 		dbConfig.Host, dbConfig.Port, dbConfig.User, dbConfig.Password, dbConfig.SSLMode)

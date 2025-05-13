@@ -24,14 +24,11 @@ func (s *Server) setupRoutes() {
 
 	// Add variant routes
 	variants := v1.Group("/variants")
-	variants.POST("", s.handler.Variant.Create)
 	variants.GET("", s.handler.Variant.List)
 	variants.GET("/:id", s.handler.Variant.Get)
-	variants.GET("/product/:productId", s.handler.Variant.GetByProductID)
-	variants.GET("/options", s.handler.Variant.GetOptions)
 	variants.PUT("/:id", s.handler.Variant.Update)
-	variants.DELETE("/:id", s.handler.Variant.Delete)
 	variants.PATCH("/:id/stock", s.handler.Variant.UpdateStockLevel)
+	variants.GET("/product/:productId", s.handler.Variant.ListByProduct)
 
 	// Price routes
 	prices := v1.Group("/prices")

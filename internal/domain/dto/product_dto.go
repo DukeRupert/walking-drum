@@ -21,17 +21,25 @@ var validRoastLevels = map[string]bool{
 	"dark":   true,
 }
 
+// Valid options keys
+var validOptionKeys = map[string]bool{
+	"weight": true,
+	"grind":  true,
+}
+
 // ProductCreateDTO represents the data needed to create a new product
 type ProductCreateDTO struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	ImageURL    string `json:"image_url"`
-	Active      bool   `json:"active"`
-	StockLevel  int    `json:"stock_level"`
-	Weight      int    `json:"weight"` // Weight in grams
-	Origin      string `json:"origin"`
-	RoastLevel  string `json:"roast_level"`
-	FlavorNotes string `json:"flavor_notes"`
+	Name              string              `json:"name"`
+	Description       string              `json:"description"`
+	ImageURL          string              `json:"image_url"`
+	Active            bool                `json:"active"`
+	StockLevel        int                 `json:"stock_level"`
+	Weight            int                 `json:"weight"` // Weight in grams
+	Origin            string              `json:"origin"`
+	RoastLevel        string              `json:"roast_level"`
+	FlavorNotes       string              `json:"flavor_notes"`
+	Options           map[string][]string `json:"options"`            // Product options (e.g., weight, grind)
+	AllowSubscription bool                `json:"allow_subscription"` // Flag to indicate if product can be subscribed to
 }
 
 // Valid validates the ProductCreateDTO
@@ -54,21 +62,57 @@ func (p *ProductCreateDTO) Valid(ctx context.Context) map[string]string {
 		problems["stock_level"] = "stock level cannot be negative"
 	}
 
+	if p.RoastLevel != "" && !validRoastLevels[strings.ToLower(p.RoastLevel)] {
+		problems["roast_level"] = "must be one of: light, medium, dark"
+	}
+
+	// Validate ImageURL if provided
+	if p.ImageURL != "" {
+		_, err := url.ParseRequestURI(p.ImageURL)
+		if err != nil {
+			problems["image_url"] = "must be a valid URL"
+		}
+	}
+
+	// Validate options
+	if p.Options != nil {
+		for key, values := range p.Options {
+			if !validOptionKeys[key] {
+				problems["options."+key] = "is not a valid option key"
+			}
+			if len(values) == 0 {
+				problems["options."+key] = "must have at least one value"
+			}
+		}
+
+		// Check that weight and grind options are defined if product allows subscription
+		if p.AllowSubscription {
+			if _, hasWeight := p.Options["weight"]; !hasWeight {
+				problems["options.weight"] = "weight options are required for subscription products"
+			}
+			if _, hasGrind := p.Options["grind"]; !hasGrind {
+				problems["options.grind"] = "grind options are required for subscription products"
+			}
+		}
+	}
+
 	return problems
 }
 
 // ProductUpdateDTO represents the data needed to update a product
 // Using pointers for all fields to differentiate between zero values and absence
 type ProductUpdateDTO struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	ImageURL    *string `json:"image_url"`
-	Active      *bool   `json:"active"`
-	StockLevel  *int    `json:"stock_level"`
-	Weight      *int    `json:"weight"` // Weight in grams
-	Origin      *string `json:"origin"`
-	RoastLevel  *string `json:"roast_level"`
-	FlavorNotes *string `json:"flavor_notes"`
+	Name              *string              `json:"name"`
+	Description       *string              `json:"description"`
+	ImageURL          *string              `json:"image_url"`
+	Active            *bool                `json:"active"`
+	StockLevel        *int                 `json:"stock_level"`
+	Weight            *int                 `json:"weight"` // Weight in grams
+	Origin            *string              `json:"origin"`
+	RoastLevel        *string              `json:"roast_level"`
+	FlavorNotes       *string              `json:"flavor_notes"`
+	Options           *map[string][]string `json:"options"`            // Product options
+	AllowSubscription *bool                `json:"allow_subscription"` // Flag to indicate if product can be subscribed to
 }
 
 // Valid performs validation on the ProductUpdateDTO fields
@@ -128,21 +172,46 @@ func (dto *ProductUpdateDTO) Valid(ctx context.Context) map[string]string {
 		problems["flavor_notes"] = "must not exceed 255 characters"
 	}
 
+	// Validate options
+	if dto.Options != nil {
+		for key, values := range *dto.Options {
+			if !validOptionKeys[key] {
+				problems["options."+key] = "is not a valid option key"
+			}
+			if len(values) == 0 {
+				problems["options."+key] = "must have at least one value"
+			}
+		}
+
+		// Check that weight and grind options are defined if product allows subscription
+		if dto.AllowSubscription != nil && *dto.AllowSubscription {
+			options := *dto.Options
+			if _, hasWeight := options["weight"]; !hasWeight {
+				problems["options.weight"] = "weight options are required for subscription products"
+			}
+			if _, hasGrind := options["grind"]; !hasGrind {
+				problems["options.grind"] = "grind options are required for subscription products"
+			}
+		}
+	}
+
 	return problems
 }
 
 // ProductResponseDTO represents the data returned to the client
 type ProductResponseDTO struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	ImageURL    string `json:"image_url"`
-	Active      bool   `json:"active"`
-	StockLevel  int    `json:"stock_level"`
-	Weight      int    `json:"weight"`
-	Origin      string `json:"origin"`
-	RoastLevel  string `json:"roast_level"`
-	FlavorNotes string `json:"flavor_notes"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID                string              `json:"id"`
+	Name              string              `json:"name"`
+	Description       string              `json:"description"`
+	ImageURL          string              `json:"image_url"`
+	Active            bool                `json:"active"`
+	StockLevel        int                 `json:"stock_level"`
+	Weight            int                 `json:"weight"`
+	Origin            string              `json:"origin"`
+	RoastLevel        string              `json:"roast_level"`
+	FlavorNotes       string              `json:"flavor_notes"`
+	Options           map[string][]string `json:"options"`
+	AllowSubscription bool                `json:"allow_subscription"`
+	CreatedAt         string              `json:"created_at"`
+	UpdatedAt         string              `json:"updated_at"`
 }

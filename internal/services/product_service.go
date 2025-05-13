@@ -27,7 +27,8 @@ type ProductService interface {
 // productService is the private implementation of ProductService
 type productService struct {
 	productRepo  interfaces.ProductRepository
-	stripeClient stripe.StripeService
+	variantService variantService
+	stripeService stripe.StripeService
 	logger       zerolog.Logger
 }
 
@@ -35,7 +36,7 @@ type productService struct {
 func NewProductService(repo interfaces.ProductRepository, stripe stripe.StripeService, logger *zerolog.Logger) ProductService {
 	return &productService{
 		productRepo:  repo,
-		stripeClient: stripe,
+		stripeService: stripe,
 		logger:       logger.With().Str("component", "product_service").Logger(),
 	}
 }
@@ -69,16 +70,17 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		Bool("active", productDTO.Active).
 		Msg("Creating product in Stripe")
 
-	stripeProduct, err := s.stripeClient.CreateProduct(ctx, &stripe.ProductCreateParams{
+	stripeProduct, err := s.stripeService.CreateProduct(ctx, &stripe.ProductCreateParams{
 		Name:        productDTO.Name,
 		Description: productDTO.Description,
 		Images:      []string{productDTO.ImageURL},
 		Active:      productDTO.Active,
 		Metadata: map[string]string{
-			"origin":       productDTO.Origin,
-			"roast_level":  productDTO.RoastLevel,
-			"flavor_notes": productDTO.FlavorNotes,
-			"weight":       fmt.Sprintf("%d", productDTO.Weight),
+			"origin":              productDTO.Origin,
+			"roast_level":         productDTO.RoastLevel,
+			"flavor_notes":        productDTO.FlavorNotes,
+			"weight":              fmt.Sprintf("%d", productDTO.Weight),
+			"allow_subscription":  fmt.Sprintf("%t", productDTO.AllowSubscription),
 		},
 	})
 	if err != nil {
@@ -97,19 +99,21 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 	// 3. Create product in local database
 	now := time.Now()
 	product := &models.Product{
-		ID:          uuid.New(),
-		Name:        productDTO.Name,
-		Description: productDTO.Description,
-		ImageURL:    productDTO.ImageURL,
-		Active:      productDTO.Active,
-		StockLevel:  productDTO.StockLevel,
-		Weight:      productDTO.Weight,
-		Origin:      productDTO.Origin,
-		RoastLevel:  productDTO.RoastLevel,
-		FlavorNotes: productDTO.FlavorNotes,
-		StripeID:    stripeProduct.ID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                uuid.New(),
+		Name:              productDTO.Name,
+		Description:       productDTO.Description,
+		ImageURL:          productDTO.ImageURL,
+		Active:            productDTO.Active,
+		StockLevel:        productDTO.StockLevel,
+		Weight:            productDTO.Weight,
+		Origin:            productDTO.Origin,
+		RoastLevel:        productDTO.RoastLevel,
+		FlavorNotes:       productDTO.FlavorNotes,
+		Options:           productDTO.Options,
+		AllowSubscription: productDTO.AllowSubscription,
+		StripeID:          stripeProduct.ID,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 
 	s.logger.Debug().
@@ -132,7 +136,7 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 			Str("stripeProductID", stripeProduct.ID).
 			Msg("Attempting to archive Stripe product after database failure")
 
-		if archiveErr := s.stripeClient.ArchiveProduct(ctx, stripeProduct.ID); archiveErr != nil {
+		if archiveErr := s.stripeService.ArchiveProduct(ctx, stripeProduct.ID); archiveErr != nil {
 			// Log this error, but continue with the main error
 			s.logger.Error().
 				Str("function", "productService.Create").
@@ -147,6 +151,31 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		}
 
 		return nil, fmt.Errorf("failed to create product in database: %w", err)
+	}
+
+	// 5. Create variants for the product based on options
+	if product.Options != nil && len(product.Options) > 0 {
+		s.logger.Debug().
+			Str("function", "productService.Create").
+			Str("productID", product.ID.String()).
+			Interface("options", product.Options).
+			Msg("Generating variants for product")
+
+		err = s.variantService.GenerateVariantsForProduct(ctx, product)
+		if err != nil {
+			s.logger.Error().
+				Str("function", "productService.Create").
+				Err(err).
+				Str("productID", product.ID.String()).
+				Msg("Failed to generate variants for product")
+				
+			// We won't fail the product creation if variant generation fails,
+			// but we'll log the error
+			s.logger.Warn().
+				Str("function", "productService.Create").
+				Str("productID", product.ID.String()).
+				Msg("Product was created but variants generation failed")
+		}
 	}
 
 	s.logger.Info().
@@ -307,6 +336,7 @@ func (s *productService) List(ctx context.Context, offset, limit int, includeIna
 }
 
 // Update updates an existing product
+// Update updates an existing product
 func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *dto.ProductUpdateDTO) (*models.Product, error) {
 	// Get request ID from context if available
 	var requestID string
@@ -333,6 +363,14 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 			Str("product_id", id.String()).
 			Msg("Product not found")
 		return nil, fmt.Errorf("product not found with id: %s", id)
+	}
+
+	// Store the old options for variant management
+	oldOptions := make(map[string][]string)
+	for k, v := range existingProduct.Options {
+		oldValues := make([]string, len(v))
+		copy(oldValues, v)
+		oldOptions[k] = oldValues
 	}
 
 	// 2. Update fields from DTO
@@ -364,12 +402,18 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 	if productDTO.FlavorNotes != nil {
 		existingProduct.FlavorNotes = *productDTO.FlavorNotes
 	}
+	if productDTO.Options != nil {
+		existingProduct.Options = *productDTO.Options
+	}
+	if productDTO.AllowSubscription != nil {
+		existingProduct.AllowSubscription = *productDTO.AllowSubscription
+	}
 
 	existingProduct.UpdatedAt = time.Now()
 
 	// 3. Update in Stripe if product has a Stripe ID
 	if existingProduct.StripeID != "" {
-		err = s.stripeClient.UpdateProduct(ctx, existingProduct)
+		err = s.stripeService.UpdateProduct(ctx, existingProduct)
 		if err != nil {
 			s.logger.Error().
 				Err(err).
@@ -404,6 +448,71 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 			Str("product_id", id.String()).
 			Msg("Error updating product in database")
 		return nil, fmt.Errorf("error updating product in database: %w", err)
+	}
+
+	// 5. Check if variants need to be updated
+	if productDTO.Options != nil {
+		optionsChanged := false
+		
+		// Check if options have changed
+		if len(oldOptions) != len(existingProduct.Options) {
+			optionsChanged = true
+		} else {
+			// Check each option
+			for key, oldValues := range oldOptions {
+				newValues, exists := existingProduct.Options[key]
+				if !exists {
+					optionsChanged = true
+					break
+				}
+				
+				// Check if values have changed
+				if len(oldValues) != len(newValues) {
+					optionsChanged = true
+					break
+				}
+				
+				// Check each value
+				for i, oldValue := range oldValues {
+					if i >= len(newValues) || oldValue != newValues[i] {
+						optionsChanged = true
+						break
+					}
+				}
+				
+				if optionsChanged {
+					break
+				}
+			}
+		}
+		
+		if optionsChanged {
+			s.logger.Debug().
+				Str("service", "ProductService.Update").
+				Str("request_id", requestID).
+				Str("product_id", id.String()).
+				Interface("old_options", oldOptions).
+				Interface("new_options", existingProduct.Options).
+				Msg("Product options have changed, updating variants")
+				
+			err = s.variantService.UpdateVariantsForProduct(ctx, existingProduct, oldOptions)
+			if err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("service", "ProductService.Update").
+					Str("request_id", requestID).
+					Str("product_id", id.String()).
+					Msg("Error updating variants for product")
+					
+				// We won't fail the product update if variant update fails,
+				// but we'll log the error
+				s.logger.Warn().
+					Str("service", "ProductService.Update").
+					Str("request_id", requestID).
+					Str("product_id", id.String()).
+					Msg("Product was updated but variants update failed")
+			}
+		}
 	}
 
 	s.logger.Info().
@@ -461,7 +570,7 @@ func (s *productService) Delete(ctx context.Context, id uuid.UUID) error {
             Str("stripe_id", product.StripeID).
             Msg("Archiving product in Stripe")
             
-        err = s.stripeClient.ArchiveProduct(ctx, product.StripeID)
+        err = s.stripeService.ArchiveProduct(ctx, product.StripeID)
         if err != nil {
             s.logger.Error().
                 Str("function", "productService.Delete").

@@ -19,20 +19,25 @@ type Services struct {
 func CreateServices(cfg *config.Config, repos *postgres.Repositories, logger *zerolog.Logger) *Services {
 	// Initialize Stripe client
 	stripeService := stripe.NewClient(cfg.Stripe.SecretKey, logger)
+	productService := NewProductService(repos.Product, stripeService, logger)
+	variantService := NewVariantService(repos.Variant, repos.Product, repos.Price, stripeService, logger)
+	priceService := NewPriceService(repos.Price, repos.Product, stripeService, logger)
+	customerService := NewCustomerService(repos.Customer, stripeService, logger)
+	subscriptionService := NewSubscriptionService(
+		repos.Subscription,
+		repos.Customer,
+		repos.Product,
+		repos.Price,
+		stripeService,
+		logger,
+	)
 
 	return &Services{
-		Product:  NewProductService(repos.Product, stripeService, logger),
-		Variant:  NewVariantService(repos.Variant, repos.Product, repos.Price, logger),
-		Price:    NewPriceService(repos.Price, repos.Product, stripeService, logger),
-		Customer: NewCustomerService(repos.Customer, stripeService, logger),
-		Subscription: NewSubscriptionService(
-			repos.Subscription,
-			repos.Customer,
-			repos.Product,
-			repos.Price,
-			stripeService,
-			logger,
-		),
-		Stripe: stripe.NewClient(cfg.Stripe.SecretKey, logger),
+		Product:      productService,
+		Variant:      variantService,
+		Price:        priceService,
+		Customer:     customerService,
+		Subscription: subscriptionService,
+		Stripe:       stripeService,
 	}
 }

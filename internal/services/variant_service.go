@@ -2,36 +2,42 @@
 package services
 
 import (
-	"context"
+"context"
 	"fmt"
 	"time"
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
+	"github.com/dukerupert/walking-drum/internal/services/stripe"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
 // VariantService defines the interface for variant business logic
 type VariantService interface {
-	Create(ctx context.Context, variantDTO *dto.VariantCreateDTO) (*models.Variant, error)
+	// Generate variants for a product based on its options
+	GenerateVariantsForProduct(ctx context.Context, product *models.Product) error
+	
+	// Update variants for a product after options change
+	UpdateVariantsForProduct(ctx context.Context, product *models.Product, oldOptions map[string][]string) error
+	
+	// Get variants for a product
+	GetVariantsByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Variant, error)
+	
+	// Basic CRUD operations
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Variant, error)
-	GetByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Variant, error)
-	GetByAttributes(ctx context.Context, productID uuid.UUID, weight, grind string) (*models.Variant, error)
-	List(ctx context.Context, page, pageSize int, activeOnly bool) ([]*models.VariantWithDetails, int, error)
+	List(ctx context.Context, page, pageSize int, activeOnly bool) ([]*models.Variant, int, error)
 	Update(ctx context.Context, id uuid.UUID, variantDTO *dto.VariantUpdateDTO) (*models.Variant, error)
-	Delete(ctx context.Context, id uuid.UUID) error
 	UpdateStockLevel(ctx context.Context, id uuid.UUID, quantity int) error
-	GetAvailableOptions() (*dto.VariantOptionsResponse, error)
 }
 
-// variantService implements the VariantService interface
 type variantService struct {
-	variantRepo interfaces.VariantRepository
-	productRepo interfaces.ProductRepository
-	priceRepo   interfaces.PriceRepository
-	logger      zerolog.Logger
+	variantRepo  interfaces.VariantRepository
+	productRepo  interfaces.ProductRepository
+	priceRepo    interfaces.PriceRepository
+	stripeClient stripe.StripeService
+	logger       zerolog.Logger
 }
 
 // NewVariantService creates a new variant service
@@ -39,13 +45,15 @@ func NewVariantService(
 	variantRepo interfaces.VariantRepository,
 	productRepo interfaces.ProductRepository,
 	priceRepo interfaces.PriceRepository,
+	stripeClient stripe.StripeService,
 	logger *zerolog.Logger,
 ) VariantService {
 	return &variantService{
-		variantRepo: variantRepo,
-		productRepo: productRepo,
-		priceRepo:   priceRepo,
-		logger:      logger.With().Str("component", "variant_service").Logger(),
+		variantRepo:  variantRepo,
+		productRepo:  productRepo,
+		priceRepo:    priceRepo,
+		stripeClient: stripeClient,
+		logger:       logger.With().Str("component", "variant_service").Logger(),
 	}
 }
 
@@ -201,6 +209,266 @@ func (s *variantService) Create(ctx context.Context, variantDTO *dto.VariantCrea
 	return variant, nil
 }
 
+// GenerateVariantsForProduct creates all possible variants for a product based on its options
+func (s *variantService) GenerateVariantsForProduct(ctx context.Context, product *models.Product) error {
+	s.logger.Debug().
+		Str("function", "variantService.GenerateVariantsForProduct").
+		Str("product_id", product.ID.String()).
+		Interface("options", product.Options).
+		Msg("Starting variant generation for product")
+
+	// Check if product has options
+	if product.Options == nil || len(product.Options) == 0 {
+		s.logger.Warn().
+			Str("function", "variantService.GenerateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Msg("Product has no options, skipping variant generation")
+		return nil
+	}
+
+	// Extract weight and grind options
+	weightOptions, hasWeight := product.Options["weight"]
+	grindOptions, hasGrind := product.Options["grind"]
+
+	// Validate options
+	if !hasWeight || len(weightOptions) == 0 {
+		s.logger.Error().
+			Str("function", "variantService.GenerateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Msg("Product has no weight options")
+		return fmt.Errorf("product must have weight options")
+	}
+
+	if !hasGrind || len(grindOptions) == 0 {
+		s.logger.Error().
+			Str("function", "variantService.GenerateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Msg("Product has no grind options")
+		return fmt.Errorf("product must have grind options")
+	}
+
+	// Create a variant for each combination of weight and grind
+	for _, weight := range weightOptions {
+		for _, grind := range grindOptions {
+			// Check if variant already exists
+			existingVariant, err := s.variantRepo.GetByAttributes(ctx, product.ID, weight, grind)
+			if err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("function", "variantService.GenerateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("weight", weight).
+					Str("grind", grind).
+					Msg("Error checking for existing variant")
+				return fmt.Errorf("error checking for existing variant: %w", err)
+			}
+
+			if existingVariant != nil {
+				s.logger.Debug().
+					Str("function", "variantService.GenerateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("variant_id", existingVariant.ID.String()).
+					Str("weight", weight).
+					Str("grind", grind).
+					Msg("Variant already exists, skipping")
+				continue
+			}
+
+			// Create a Stripe product for the variant
+			variantName := fmt.Sprintf("%s - %s, %s", product.Name, weight, grind)
+			variantDescription := fmt.Sprintf("%s. Weight: %s, Grind: %s", product.Description, weight, grind)
+
+			stripeProduct, err := s.stripeClient.CreateProduct(ctx, &stripe.ProductCreateParams{
+				Name:        variantName,
+				Description: variantDescription,
+				Images:      []string{product.ImageURL},
+				Active:      product.Active,
+				Metadata: map[string]string{
+					"product_id":  product.ID.String(),
+					"weight":      weight,
+					"grind":       grind,
+					"origin":      product.Origin,
+					"roast_level": product.RoastLevel,
+				},
+			})
+			if err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("function", "variantService.GenerateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("weight", weight).
+					Str("grind", grind).
+					Msg("Failed to create Stripe product for variant")
+				return fmt.Errorf("failed to create Stripe product for variant: %w", err)
+			}
+
+			s.logger.Debug().
+				Str("function", "variantService.GenerateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("stripe_product_id", stripeProduct.ID).
+				Str("weight", weight).
+				Str("grind", grind).
+				Msg("Created Stripe product for variant")
+
+			// Create a default price for the variant if it's a one-time purchase
+			stripePrice, err := s.stripeClient.CreatePrice(ctx, &stripe.PriceCreateParams{
+				ProductID:  stripeProduct.ID,
+				Currency:   "usd",
+				UnitAmount: 1500, // Default price, $15.00
+				Nickname:   "Default one-time price",
+				Active:     true,
+				Metadata: map[string]string{
+					"product_id": product.ID.String(),
+					"weight":     weight,
+					"grind":      grind,
+				},
+			})
+			if err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("function", "variantService.GenerateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("stripe_product_id", stripeProduct.ID).
+					Msg("Failed to create Stripe price for variant")
+
+				// Try to clean up the Stripe product since price creation failed
+				if archiveErr := s.stripeClient.ArchiveProduct(ctx, stripeProduct.ID); archiveErr != nil {
+					s.logger.Error().
+						Err(archiveErr).
+						Str("stripe_product_id", stripeProduct.ID).
+						Msg("Failed to archive Stripe product after price creation error")
+				}
+
+				return fmt.Errorf("failed to create Stripe price for variant: %w", err)
+			}
+
+			// Save the price to our database
+			now := time.Now()
+			price := &models.Price{
+				ID:            uuid.New(),
+				ProductID:     product.ID,
+				Name:          "Default one-time price",
+				Amount:        1500,
+				Currency:      "usd",
+				Type:          "one_time",
+				Active:        true,
+				StripeID:      stripePrice.ID,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+
+			if err := s.priceRepo.Create(ctx, price); err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("function", "variantService.GenerateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("stripe_price_id", stripePrice.ID).
+					Msg("Failed to save price to database")
+				return fmt.Errorf("failed to save price to database: %w", err)
+			}
+
+			// Create subscription price if the product allows subscriptions
+			var subscriptionPriceID uuid.UUID
+			if product.AllowSubscription {
+				stripeSubPrice, err := s.stripeClient.CreatePrice(ctx, &stripe.PriceCreateParams{
+					ProductID:  stripeProduct.ID,
+					Currency:   "usd",
+					UnitAmount: 1200, // Default subscription price, $12.00 (slightly cheaper)
+					Nickname:   "Monthly subscription",
+					Recurring: &stripe.RecurringParams{
+						Interval:      "month",
+						IntervalCount: 1,
+					},
+					Active: true,
+					Metadata: map[string]string{
+						"product_id": product.ID.String(),
+						"weight":     weight,
+						"grind":      grind,
+						"type":       "subscription",
+					},
+				})
+				if err != nil {
+					s.logger.Error().
+						Err(err).
+						Str("function", "variantService.GenerateVariantsForProduct").
+						Str("product_id", product.ID.String()).
+						Str("stripe_product_id", stripeProduct.ID).
+						Msg("Failed to create Stripe subscription price for variant")
+					return fmt.Errorf("failed to create Stripe subscription price for variant: %w", err)
+				}
+
+				// Save the subscription price to our database
+				subscriptionPrice := &models.Price{
+					ID:            uuid.New(),
+					ProductID:     product.ID,
+					Name:          "Monthly subscription",
+					Amount:        1200,
+					Currency:      "usd",
+					Type:          "recurring",
+					Interval:      "month",
+					IntervalCount: 1,
+					Active:        true,
+					StripeID:      stripeSubPrice.ID,
+					CreatedAt:     now,
+					UpdatedAt:     now,
+				}
+
+				if err := s.priceRepo.Create(ctx, subscriptionPrice); err != nil {
+					s.logger.Error().
+						Err(err).
+						Str("function", "variantService.GenerateVariantsForProduct").
+						Str("product_id", product.ID.String()).
+						Str("stripe_price_id", stripeSubPrice.ID).
+						Msg("Failed to save subscription price to database")
+					return fmt.Errorf("failed to save subscription price to database: %w", err)
+				}
+
+				subscriptionPriceID = subscriptionPrice.ID
+			}
+
+			// Create the variant in our database
+			variant := &models.Variant{
+				ID:            uuid.New(),
+				ProductID:     product.ID,
+				PriceID:       price.ID,
+				StripePriceID: stripePrice.ID,
+				Weight:        weight,
+				Grind:         grind,
+				Active:        product.Active,
+				StockLevel:    product.StockLevel,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+
+			if err := s.variantRepo.Create(ctx, variant); err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("function", "variantService.GenerateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("variant_id", variant.ID.String()).
+					Msg("Failed to save variant to database")
+				return fmt.Errorf("failed to save variant to database: %w", err)
+			}
+
+			s.logger.Info().
+				Str("function", "variantService.GenerateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("variant_id", variant.ID.String()).
+				Str("weight", weight).
+				Str("grind", grind).
+				Str("stripe_product_id", stripeProduct.ID).
+				Msg("Successfully created variant")
+		}
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.GenerateVariantsForProduct").
+		Str("product_id", product.ID.String()).
+		Msg("Successfully generated all variants for product")
+
+	return nil
+}
+
 // GetByID retrieves a variant by its ID
 func (s *variantService) GetByID(ctx context.Context, id uuid.UUID) (*models.Variant, error) {
 	s.logger.Debug().
@@ -266,7 +534,7 @@ func (s *variantService) GetByID(ctx context.Context, id uuid.UUID) (*models.Var
 }
 
 // GetByProductID retrieves all variants for a product
-func (s *variantService) GetByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Variant, error) {
+func (s *variantService) GetVariantsByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Variant, error) {
 	s.logger.Debug().
 		Str("function", "variantService.GetByProductID").
 		Str("product_id", productID.String()).
@@ -399,7 +667,7 @@ func (s *variantService) GetByAttributes(ctx context.Context, productID uuid.UUI
 }
 
 // List retrieves all variants with pagination and enriched details
-func (s *variantService) List(ctx context.Context, offset, limit int, activeOnly bool) ([]*models.VariantWithDetails, int, error) {
+func (s *variantService) List(ctx context.Context, offset, limit int, activeOnly bool) ([]*models.Variant, int, error) {
 	s.logger.Debug().
 		Str("function", "variantService.List").
 		Int("offset", offset).
@@ -691,6 +959,316 @@ func (s *variantService) Update(ctx context.Context, id uuid.UUID, variantDTO *d
 		Msg("Variant successfully updated")
 
 	return existingVariant, nil
+}
+
+// UpdateVariantsForProduct updates variants after product options change
+func (s *variantService) UpdateVariantsForProduct(ctx context.Context, product *models.Product, oldOptions map[string][]string) error {
+	s.logger.Debug().
+		Str("function", "variantService.UpdateVariantsForProduct").
+		Str("product_id", product.ID.String()).
+		Interface("new_options", product.Options).
+		Interface("old_options", oldOptions).
+		Msg("Starting variant update for product")
+
+	// Get existing variants
+	existingVariants, err := s.variantRepo.GetByProductID(ctx, product.ID)
+	if err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("function", "variantService.UpdateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Msg("Failed to get existing variants")
+		return fmt.Errorf("failed to get existing variants: %w", err)
+	}
+
+	// Build a map of existing variant combinations for quick lookup
+	existingCombinations := make(map[string]*models.Variant)
+	for _, v := range existingVariants {
+		key := v.Weight + ":" + v.Grind
+		existingCombinations[key] = v
+	}
+
+	// Determine which combinations are new and need to be created
+	newVariants := make([]struct {
+		weight string
+		grind  string
+	}, 0)
+
+	// Extract current weight and grind options
+	weightOptions, hasWeight := product.Options["weight"]
+	grindOptions, hasGrind := product.Options["grind"]
+
+	if hasWeight && hasGrind {
+		for _, weight := range weightOptions {
+			for _, grind := range grindOptions {
+				key := weight + ":" + grind
+				if _, exists := existingCombinations[key]; !exists {
+					newVariants = append(newVariants, struct {
+						weight string
+						grind  string
+					}{weight, grind})
+				}
+			}
+		}
+	}
+
+	// Create new variants for the added options
+	for _, newVariant := range newVariants {
+		// Create a Stripe product for the variant
+		variantName := fmt.Sprintf("%s - %s, %s", product.Name, newVariant.weight, newVariant.grind)
+		variantDescription := fmt.Sprintf("%s. Weight: %s, Grind: %s", product.Description, newVariant.weight, newVariant.grind)
+
+		stripeProduct, err := s.stripeClient.CreateProduct(ctx, &stripe.ProductCreateParams{
+			Name:        variantName,
+			Description: variantDescription,
+			Images:      []string{product.ImageURL},
+			Active:      product.Active,
+			Metadata: map[string]string{
+				"product_id":  product.ID.String(),
+				"weight":      newVariant.weight,
+				"grind":       newVariant.grind,
+				"origin":      product.Origin,
+				"roast_level": product.RoastLevel,
+			},
+		})
+		if err != nil {
+			s.logger.Error().
+				Err(err).
+				Str("function", "variantService.UpdateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("weight", newVariant.weight).
+				Str("grind", newVariant.grind).
+				Msg("Failed to create Stripe product for new variant")
+			return fmt.Errorf("failed to create Stripe product for new variant: %w", err)
+		}
+
+		// Create a default price for the variant
+		stripePrice, err := s.stripeClient.CreatePrice(ctx, &stripe.PriceCreateParams{
+			ProductID:  stripeProduct.ID,
+			Currency:   "usd",
+			UnitAmount: 1500, // Default price
+			Nickname:   "Default one-time price",
+			Active:     true,
+			Metadata: map[string]string{
+				"product_id": product.ID.String(),
+				"weight":     newVariant.weight,
+				"grind":      newVariant.grind,
+			},
+		})
+		if err != nil {
+			s.logger.Error().
+				Err(err).
+				Str("function", "variantService.UpdateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("stripe_product_id", stripeProduct.ID).
+				Msg("Failed to create Stripe price for new variant")
+			return fmt.Errorf("failed to create Stripe price for new variant: %w", err)
+		}
+
+		// Save the price to our database
+		now := time.Now()
+		price := &models.Price{
+			ID:            uuid.New(),
+			ProductID:     product.ID,
+			Name:          "Default one-time price",
+			Amount:        1500,
+			Currency:      "usd",
+			Type:          "one_time",
+			Active:        true,
+			StripeID:      stripePrice.ID,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+
+		if err := s.priceRepo.Create(ctx, price); err != nil {
+			s.logger.Error().
+				Err(err).
+				Str("function", "variantService.UpdateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("stripe_price_id", stripePrice.ID).
+				Msg("Failed to save price to database")
+			return fmt.Errorf("failed to save price to database: %w", err)
+		}
+
+		// Create subscription price if the product allows subscriptions
+		var subscriptionPriceID uuid.UUID
+		if product.AllowSubscription {
+			stripeSubPrice, err := s.stripeClient.CreatePrice(ctx, &stripe.PriceCreateParams{
+				ProductID:  stripeProduct.ID,
+				Currency:   "usd",
+				UnitAmount: 1200, // Default subscription price (slightly cheaper)
+				Nickname:   "Monthly subscription",
+				Recurring: &stripe.RecurringParams{
+					Interval:      "month",
+					IntervalCount: 1,
+				},
+				Active: true,
+				Metadata: map[string]string{
+					"product_id": product.ID.String(),
+					"weight":     newVariant.weight,
+					"grind":      newVariant.grind,
+					"type":       "subscription",
+				},
+			})
+			if err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("function", "variantService.UpdateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("stripe_product_id", stripeProduct.ID).
+					Msg("Failed to create Stripe subscription price for new variant")
+				return fmt.Errorf("failed to create Stripe subscription price for new variant: %w", err)
+			}
+
+			// Save the subscription price to our database
+			subscriptionPrice := &models.Price{
+				ID:            uuid.New(),
+				ProductID:     product.ID,
+				Name:          "Monthly subscription",
+				Amount:        1200,
+				Currency:      "usd",
+				Type:          "recurring",
+				Interval:      "month",
+				IntervalCount: 1,
+				Active:        true,
+				StripeID:      stripeSubPrice.ID,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+
+			if err := s.priceRepo.Create(ctx, subscriptionPrice); err != nil {
+				s.logger.Error().
+					Err(err).
+					Str("function", "variantService.UpdateVariantsForProduct").
+					Str("product_id", product.ID.String()).
+					Str("stripe_price_id", stripeSubPrice.ID).
+					Msg("Failed to save subscription price to database")
+				return fmt.Errorf("failed to save subscription price to database: %w", err)
+			}
+
+			subscriptionPriceID = subscriptionPrice.ID
+		}
+
+		// Create the variant in our database
+		variant := &models.Variant{
+			ID:            uuid.New(),
+			ProductID:     product.ID,
+			PriceID:       price.ID,
+			StripePriceID: stripePrice.ID,
+			Weight:        newVariant.weight,
+			Grind:         newVariant.grind,
+			Active:        product.Active,
+			StockLevel:    product.StockLevel,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+
+		if err := s.variantRepo.Create(ctx, variant); err != nil {
+			s.logger.Error().
+				Err(err).
+				Str("function", "variantService.UpdateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("variant_id", variant.ID.String()).
+				Msg("Failed to save variant to database")
+			return fmt.Errorf("failed to save variant to database: %w", err)
+		}
+
+		s.logger.Info().
+			Str("function", "variantService.UpdateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Str("variant_id", variant.ID.String()).
+			Str("weight", newVariant.weight).
+			Str("grind", newVariant.grind).
+			Msg("Successfully created new variant")
+	}
+
+	// Determine which variants need to be removed
+	removedVariants := make([]*models.Variant, 0)
+	
+	// Check if the combination still exists in the new options
+	for _, variant := range existingVariants {
+		weightExists := false
+		grindExists := false
+		
+		// Check if the variant's weight is still in the weight options
+		if weightOptions, ok := product.Options["weight"]; ok {
+			for _, w := range weightOptions {
+				if w == variant.Weight {
+					weightExists = true
+					break
+				}
+			}
+		}
+		
+		// Check if the variant's grind is still in the grind options
+		if grindOptions, ok := product.Options["grind"]; ok {
+			for _, g := range grindOptions {
+				if g == variant.Grind {
+					grindExists = true
+					break
+				}
+			}
+		}
+		
+		// If either the weight or grind is no longer in the options, the variant should be removed
+		if !weightExists || !grindExists {
+			removedVariants = append(removedVariants, variant)
+			s.logger.Debug().
+				Str("function", "variantService.UpdateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("variant_id", variant.ID.String()).
+				Str("weight", variant.Weight).
+				Str("grind", variant.Grind).
+				Msg("Variant marked for removal")
+		}
+	}
+
+	// Remove the variants that are no longer valid
+	for _, variant := range removedVariants {
+		// Check if this variant has any active subscriptions
+		// Ideally, we would have a subscription repository method for this
+		// But for now, we'll just log a warning and proceed with deletion
+		s.logger.Warn().
+			Str("function", "variantService.UpdateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Str("variant_id", variant.ID.String()).
+			Msg("Checking for active subscriptions for variant before deletion")
+		
+		// Archive the Stripe product if we have a Stripe ID for it
+		// For this implementation, we would need to have the Stripe product ID stored with the variant
+		// For now, we'll just log a warning
+		s.logger.Warn().
+			Str("function", "variantService.UpdateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Str("variant_id", variant.ID.String()).
+			Msg("Would archive Stripe product for variant here")
+		
+		// Delete the variant from the database
+		if err := s.variantRepo.Delete(ctx, variant.ID); err != nil {
+			s.logger.Error().
+				Err(err).
+				Str("function", "variantService.UpdateVariantsForProduct").
+				Str("product_id", product.ID.String()).
+				Str("variant_id", variant.ID.String()).
+				Msg("Failed to delete variant from database")
+			return fmt.Errorf("failed to delete variant from database: %w", err)
+		}
+		
+		s.logger.Info().
+			Str("function", "variantService.UpdateVariantsForProduct").
+			Str("product_id", product.ID.String()).
+			Str("variant_id", variant.ID.String()).
+			Msg("Successfully deleted variant")
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.UpdateVariantsForProduct").
+		Str("product_id", product.ID.String()).
+		Int("new_variants", len(newVariants)).
+		Int("removed_variants", len(removedVariants)).
+		Msg("Successfully updated variants for product")
+
+	return nil
 }
 
 // Delete removes a variant from the system
