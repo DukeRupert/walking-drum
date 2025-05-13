@@ -1,0 +1,763 @@
+// internal/services/variant_service.go
+package services
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/dukerupert/walking-drum/internal/domain/dto"
+	"github.com/dukerupert/walking-drum/internal/domain/models"
+	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+)
+
+// VariantService defines the interface for variant business logic
+type VariantService interface {
+	Create(ctx context.Context, variantDTO *dto.VariantCreateDTO) (*models.Variant, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Variant, error)
+	GetByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Variant, error)
+	GetByAttributes(ctx context.Context, productID uuid.UUID, weight, grind string) (*models.Variant, error)
+	List(ctx context.Context, page, pageSize int, activeOnly bool) ([]*models.VariantWithDetails, int, error)
+	Update(ctx context.Context, id uuid.UUID, variantDTO *dto.VariantUpdateDTO) (*models.Variant, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+	UpdateStockLevel(ctx context.Context, id uuid.UUID, quantity int) error
+	GetAvailableOptions() (*dto.VariantOptionsResponse, error)
+}
+
+// variantService implements the VariantService interface
+type variantService struct {
+	variantRepo interfaces.VariantRepository
+	productRepo interfaces.ProductRepository
+	priceRepo   interfaces.PriceRepository
+	logger      zerolog.Logger
+}
+
+// NewVariantService creates a new variant service
+func NewVariantService(
+	variantRepo interfaces.VariantRepository,
+	productRepo interfaces.ProductRepository,
+	priceRepo interfaces.PriceRepository,
+	logger *zerolog.Logger,
+) VariantService {
+	return &variantService{
+		variantRepo: variantRepo,
+		productRepo: productRepo,
+		priceRepo:   priceRepo,
+		logger:      logger.With().Str("component", "variant_service").Logger(),
+	}
+}
+
+// Create adds a new variant to the system
+func (s *variantService) Create(ctx context.Context, variantDTO *dto.VariantCreateDTO) (*models.Variant, error) {
+	s.logger.Debug().
+		Str("function", "variantService.Create").
+		Interface("variantDTO", variantDTO).
+		Msg("Starting variant creation")
+
+	// 1. Validate variantDTO
+	if problems := variantDTO.Valid(ctx); len(problems) > 0 {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Interface("problems", problems).
+			Msg("Variant validation failed")
+		return nil, fmt.Errorf("invalid variant data: %v", problems)
+	}
+
+	s.logger.Debug().
+		Str("function", "variantService.Create").
+		Msg("Variant validation passed")
+
+	// 2. Verify that the product exists
+	s.logger.Debug().
+		Str("function", "variantService.Create").
+		Str("product_id", variantDTO.ProductID.String()).
+		Msg("Verifying product exists")
+
+	product, err := s.productRepo.GetByID(ctx, variantDTO.ProductID)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Err(err).
+			Str("product_id", variantDTO.ProductID.String()).
+			Msg("Failed to retrieve associated product")
+		return nil, fmt.Errorf("failed to verify product exists: %w", err)
+	}
+
+	if product == nil {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Str("product_id", variantDTO.ProductID.String()).
+			Msg("Product not found")
+		return nil, fmt.Errorf("product with ID %s not found", variantDTO.ProductID)
+	}
+
+	// 3. Verify that the price exists
+	s.logger.Debug().
+		Str("function", "variantService.Create").
+		Str("price_id", variantDTO.PriceID.String()).
+		Msg("Verifying price exists")
+
+	price, err := s.priceRepo.GetByID(ctx, variantDTO.PriceID)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Err(err).
+			Str("price_id", variantDTO.PriceID.String()).
+			Msg("Failed to retrieve associated price")
+		return nil, fmt.Errorf("failed to verify price exists: %w", err)
+	}
+
+	if price == nil {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Str("price_id", variantDTO.PriceID.String()).
+			Msg("Price not found")
+		return nil, fmt.Errorf("price with ID %s not found", variantDTO.PriceID)
+	}
+
+	// 4. Verify that the price is for the product
+	if price.ProductID != variantDTO.ProductID {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Str("price_id", variantDTO.PriceID.String()).
+			Str("price_product_id", price.ProductID.String()).
+			Str("variant_product_id", variantDTO.ProductID.String()).
+			Msg("Price does not belong to the product")
+		return nil, fmt.Errorf("price with ID %s does not belong to product with ID %s",
+			variantDTO.PriceID, variantDTO.ProductID)
+	}
+
+	// 5. Check if variant with these attributes already exists
+	existingVariant, err := s.variantRepo.GetByAttributes(ctx,
+		variantDTO.ProductID, variantDTO.Weight, variantDTO.Grind)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Err(err).
+			Str("product_id", variantDTO.ProductID.String()).
+			Str("weight", variantDTO.Weight).
+			Str("grind", variantDTO.Grind).
+			Msg("Error checking for existing variant")
+		return nil, fmt.Errorf("error checking for existing variant: %w", err)
+	}
+
+	if existingVariant != nil {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Str("product_id", variantDTO.ProductID.String()).
+			Str("weight", variantDTO.Weight).
+			Str("grind", variantDTO.Grind).
+			Str("existing_variant_id", existingVariant.ID.String()).
+			Msg("Variant with these attributes already exists")
+		return nil, fmt.Errorf("variant with these attributes already exists")
+	}
+
+	// 6. Create variant in database
+	now := time.Now()
+	variant := &models.Variant{
+		ID:            uuid.New(),
+		ProductID:     variantDTO.ProductID,
+		PriceID:       variantDTO.PriceID,
+		StripePriceID: variantDTO.StripePriceID,
+		Weight:        variantDTO.Weight,
+		Grind:         variantDTO.Grind,
+		Active:        variantDTO.Active,
+		StockLevel:    variantDTO.StockLevel,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	s.logger.Debug().
+		Str("function", "variantService.Create").
+		Str("variant_id", variant.ID.String()).
+		Str("product_id", variant.ProductID.String()).
+		Str("price_id", variant.PriceID.String()).
+		Str("weight", variant.Weight).
+		Str("grind", variant.Grind).
+		Msg("Preparing to save variant to database")
+
+	if err := s.variantRepo.Create(ctx, variant); err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Create").
+			Err(err).
+			Str("variant_id", variant.ID.String()).
+			Msg("Failed to create variant in database")
+		return nil, fmt.Errorf("failed to create variant in database: %w", err)
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.Create").
+		Str("variant_id", variant.ID.String()).
+		Str("product_id", variant.ProductID.String()).
+		Str("price_id", variant.PriceID.String()).
+		Str("stripe_price_id", variant.StripePriceID).
+		Str("weight", variant.Weight).
+		Str("grind", variant.Grind).
+		Int("stock_level", variant.StockLevel).
+		Msg("Variant successfully created")
+
+	return variant, nil
+}
+
+// GetByID retrieves a variant by its ID
+func (s *variantService) GetByID(ctx context.Context, id uuid.UUID) (*models.Variant, error) {
+	s.logger.Debug().
+		Str("function", "variantService.GetByID").
+		Str("variant_id", id.String()).
+		Msg("Starting variant retrieval by ID")
+
+	// Validate ID
+	if id == uuid.Nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByID").
+			Msg("Nil UUID provided")
+		return nil, fmt.Errorf("invalid variant ID: nil UUID")
+	}
+
+	// Call repository to fetch variant
+	s.logger.Debug().
+		Str("function", "variantService.GetByID").
+		Str("variant_id", id.String()).
+		Msg("Calling repository to fetch variant")
+
+	variant, err := s.variantRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByID").
+			Err(err).
+			Str("variant_id", id.String()).
+			Msg("Failed to retrieve variant from repository")
+		return nil, fmt.Errorf("failed to retrieve variant: %w", err)
+	}
+
+	// Check if variant was found
+	if variant == nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByID").
+			Str("variant_id", id.String()).
+			Msg("Variant not found")
+		return nil, fmt.Errorf("variant with ID %s not found", id)
+	}
+
+	// Check stock level and log warning if low
+	if variant.StockLevel < 10 {
+		s.logger.Warn().
+			Str("function", "variantService.GetByID").
+			Str("variant_id", id.String()).
+			Str("product_id", variant.ProductID.String()).
+			Int("stock_level", variant.StockLevel).
+			Msg("Variant has low stock level")
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.GetByID").
+		Str("variant_id", id.String()).
+		Str("product_id", variant.ProductID.String()).
+		Str("price_id", variant.PriceID.String()).
+		Str("weight", variant.Weight).
+		Str("grind", variant.Grind).
+		Int("stock_level", variant.StockLevel).
+		Bool("active", variant.Active).
+		Msg("Variant successfully retrieved")
+
+	return variant, nil
+}
+
+// GetByProductID retrieves all variants for a product
+func (s *variantService) GetByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Variant, error) {
+	s.logger.Debug().
+		Str("function", "variantService.GetByProductID").
+		Str("product_id", productID.String()).
+		Msg("Starting variant retrieval by product ID")
+
+	// Validate product ID
+	if productID == uuid.Nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByProductID").
+			Msg("Nil UUID provided")
+		return nil, fmt.Errorf("invalid product ID: nil UUID")
+	}
+
+	// Verify that the product exists
+	product, err := s.productRepo.GetByID(ctx, productID)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByProductID").
+			Err(err).
+			Str("product_id", productID.String()).
+			Msg("Failed to retrieve product")
+		return nil, fmt.Errorf("failed to verify product exists: %w", err)
+	}
+
+	if product == nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByProductID").
+			Str("product_id", productID.String()).
+			Msg("Product not found")
+		return nil, fmt.Errorf("product with ID %s not found", productID)
+	}
+
+	// Call repository to fetch variants
+	s.logger.Debug().
+		Str("function", "variantService.GetByProductID").
+		Str("product_id", productID.String()).
+		Msg("Calling repository to fetch variants")
+
+	variants, err := s.variantRepo.GetByProductID(ctx, productID)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByProductID").
+			Err(err).
+			Str("product_id", productID.String()).
+			Msg("Failed to retrieve variants from repository")
+		return nil, fmt.Errorf("failed to retrieve variants: %w", err)
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.GetByProductID").
+		Str("product_id", productID.String()).
+		Int("variants_count", len(variants)).
+		Msg("Variants successfully retrieved")
+
+	return variants, nil
+}
+
+// GetByAttributes retrieves a variant by product ID, weight, and grind
+func (s *variantService) GetByAttributes(ctx context.Context, productID uuid.UUID, weight, grind string) (*models.Variant, error) {
+	s.logger.Debug().
+		Str("function", "variantService.GetByAttributes").
+		Str("product_id", productID.String()).
+		Str("weight", weight).
+		Str("grind", grind).
+		Msg("Starting variant retrieval by attributes")
+
+	// Validate inputs
+	if productID == uuid.Nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByAttributes").
+			Msg("Nil UUID provided")
+		return nil, fmt.Errorf("invalid product ID: nil UUID")
+	}
+
+	if weight == "" {
+		s.logger.Error().
+			Str("function", "variantService.GetByAttributes").
+			Msg("Empty weight provided")
+		return nil, fmt.Errorf("weight cannot be empty")
+	}
+
+	if grind == "" {
+		s.logger.Error().
+			Str("function", "variantService.GetByAttributes").
+			Msg("Empty grind provided")
+		return nil, fmt.Errorf("grind cannot be empty")
+	}
+
+	// Call repository to fetch variant
+	s.logger.Debug().
+		Str("function", "variantService.GetByAttributes").
+		Str("product_id", productID.String()).
+		Str("weight", weight).
+		Str("grind", grind).
+		Msg("Calling repository to fetch variant")
+
+	variant, err := s.variantRepo.GetByAttributes(ctx, productID, weight, grind)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.GetByAttributes").
+			Err(err).
+			Str("product_id", productID.String()).
+			Str("weight", weight).
+			Str("grind", grind).
+			Msg("Failed to retrieve variant from repository")
+		return nil, fmt.Errorf("failed to retrieve variant: %w", err)
+	}
+
+	// Check if variant was found
+	if variant == nil {
+		s.logger.Debug().
+			Str("function", "variantService.GetByAttributes").
+			Str("product_id", productID.String()).
+			Str("weight", weight).
+			Str("grind", grind).
+			Msg("Variant not found")
+		return nil, nil
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.GetByAttributes").
+		Str("variant_id", variant.ID.String()).
+		Str("product_id", variant.ProductID.String()).
+		Str("price_id", variant.PriceID.String()).
+		Str("weight", variant.Weight).
+		Str("grind", variant.Grind).
+		Msg("Variant successfully retrieved")
+
+	return variant, nil
+}
+
+// List retrieves all variants with pagination and enriched details
+func (s *variantService) List(ctx context.Context, offset, limit int, activeOnly bool) ([]*models.VariantWithDetails, int, error) {
+	s.logger.Debug().
+		Str("function", "variantService.List").
+		Int("offset", offset).
+		Int("limit", limit).
+		Bool("activeOnly", activeOnly).
+		Msg("Starting variant listing")
+
+	// Call repository to list variants
+	s.logger.Debug().
+		Str("function", "variantService.List").
+		Msg("Calling repository to fetch variants")
+
+	variants, total, err := s.variantRepo.List(ctx, limit, offset, activeOnly)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.List").
+			Err(err).
+			Int("offset", offset).
+			Int("limit", limit).
+			Bool("activeOnly", activeOnly).
+			Msg("Failed to retrieve variants from repository")
+		return nil, 0, fmt.Errorf("failed to list variants: %w", err)
+	}
+
+	// Log the result count
+	s.logger.Debug().
+		Str("function", "variantService.List").
+		Int("variants_count", len(variants)).
+		Int("total_count", total).
+		Msg("Successfully retrieved variants from repository")
+
+	// Enhance variants with product and price details
+	variantsWithDetails := make([]*models.VariantWithDetails, 0, len(variants))
+
+	for _, variant := range variants {
+		// Get product details
+		product, err := s.productRepo.GetByID(ctx, variant.ProductID)
+		if err != nil {
+			s.logger.Warn().
+				Str("function", "variantService.List").
+				Err(err).
+				Str("variant_id", variant.ID.String()).
+				Str("product_id", variant.ProductID.String()).
+				Msg("Failed to retrieve product details for variant")
+			continue
+		}
+
+		// Get price details
+		price, err := s.priceRepo.GetByID(ctx, variant.PriceID)
+		if err != nil {
+			s.logger.Warn().
+				Str("function", "variantService.List").
+				Err(err).
+				Str("variant_id", variant.ID.String()).
+				Str("price_id", variant.PriceID.String()).
+				Msg("Failed to retrieve price details for variant")
+			continue
+		}
+
+		// Create enhanced variant with details
+		variantWithDetails := &models.VariantWithDetails{
+			Variant:      *variant,
+			ProductName:  product.Name,
+			ProductImage: product.ImageURL,
+			Origin:       product.Origin,
+			RoastLevel:   product.RoastLevel,
+			FlavorNotes:  product.FlavorNotes,
+			Amount:       price.Amount,
+			Currency:     price.Currency,
+			PriceName:    price.Name,
+		}
+
+		variantsWithDetails = append(variantsWithDetails, variantWithDetails)
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.List").
+		Int("total_variants", total).
+		Int("returned_variants", len(variantsWithDetails)).
+		Int("offset", offset).
+		Int("limit", limit).
+		Bool("activeOnly", activeOnly).
+		Msg("Variant listing completed successfully")
+
+	return variantsWithDetails, total, nil
+}
+
+// Update updates an existing variant
+func (s *variantService) Update(ctx context.Context, id uuid.UUID, variantDTO *dto.VariantUpdateDTO) (*models.Variant, error) {
+	s.logger.Debug().
+		Str("function", "variantService.Update").
+		Str("variant_id", id.String()).
+		Interface("variantDTO", variantDTO).
+		Msg("Starting variant update")
+
+	// 1. Validate input parameters
+	if id == uuid.Nil {
+		s.logger.Error().
+			Str("function", "variantService.Update").
+			Msg("Nil UUID provided for variant ID")
+		return nil, fmt.Errorf("invalid variant ID: nil UUID")
+	}
+
+	if problems := variantDTO.Valid(ctx); len(problems) > 0 {
+		s.logger.Error().
+			Str("function", "variantService.Update").
+			Interface("problems", problems).
+			Msg("Variant update validation failed")
+		return nil, fmt.Errorf("invalid variant data: %v", problems)
+	}
+
+	// 2. Get existing variant
+	s.logger.Debug().
+		Str("function", "variantService.Update").
+		Str("variant_id", id.String()).
+		Msg("Retrieving existing variant")
+
+	existingVariant, err := s.variantRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Update").
+			Err(err).
+			Str("variant_id", id.String()).
+			Msg("Failed to retrieve existing variant")
+		return nil, fmt.Errorf("failed to retrieve existing variant: %w", err)
+	}
+
+	if existingVariant == nil {
+		s.logger.Error().
+			Str("function", "variantService.Update").
+			Str("variant_id", id.String()).
+			Msg("Variant not found")
+		return nil, fmt.Errorf("variant with ID %s not found", id)
+	}
+
+	// 3. Check if related entities need to be verified
+	if variantDTO.ProductID != nil && *variantDTO.ProductID != existingVariant.ProductID {
+		// Verify new product exists
+		product, err := s.productRepo.GetByID(ctx, *variantDTO.ProductID)
+		if err != nil {
+			s.logger.Error().
+				Str("function", "variantService.Update").
+				Err(err).
+				Str("product_id", variantDTO.ProductID.String()).
+				Msg("Failed to retrieve product")
+			return nil, fmt.Errorf("failed to verify product exists: %w", err)
+		}
+
+		if product == nil {
+			s.logger.Error().
+				Str("function", "variantService.Update").
+				Str("product_id", variantDTO.ProductID.String()).
+				Msg("Product not found")
+			return nil, fmt.Errorf("product with ID %s not found", *variantDTO.ProductID)
+		}
+
+		// Update product ID
+		existingVariant.ProductID = *variantDTO.ProductID
+	}
+
+	if variantDTO.PriceID != nil && *variantDTO.PriceID != existingVariant.PriceID {
+		// Verify new price exists
+		price, err := s.priceRepo.GetByID(ctx, *variantDTO.PriceID)
+		if err != nil {
+			s.logger.Error().
+				Str("function", "variantService.Update").
+				Err(err).
+				Str("price_id", variantDTO.PriceID.String()).
+				Msg("Failed to retrieve price")
+			return nil, fmt.Errorf("failed to verify price exists: %w", err)
+		}
+
+		if price == nil {
+			s.logger.Error().
+				Str("function", "variantService.Update").
+				Str("price_id", variantDTO.PriceID.String()).
+				Msg("Price not found")
+			return nil, fmt.Errorf("price with ID %s not found", *variantDTO.PriceID)
+		}
+
+		// Verify price belongs to product
+		if price.ProductID != existingVariant.ProductID {
+			s.logger.Error().
+				Str("function", "variantService.Update").
+				Str("price_id", variantDTO.PriceID.String()).
+				Str("price_product_id", price.ProductID.String()).
+				Str("variant_product_id", existingVariant.ProductID.String()).
+				Msg("Price does not belong to the product")
+			return nil, fmt.Errorf("price with ID %s does not belong to product with ID %s",
+				*variantDTO.PriceID, existingVariant.ProductID)
+		}
+
+		// Update price ID
+		existingVariant.PriceID = *variantDTO.PriceID
+	}
+
+	// 4. Update other fields from DTO
+	if variantDTO.StripePriceID != nil {
+		existingVariant.StripePriceID = *variantDTO.StripePriceID
+	}
+
+	if variantDTO.Weight != nil {
+		existingVariant.Weight = *variantDTO.Weight
+	}
+
+	if variantDTO.Grind != nil {
+		existingVariant.Grind = *variantDTO.Grind
+	}
+
+	if variantDTO.Active != nil {
+		existingVariant.Active = *variantDTO.Active
+	}
+
+	if variantDTO.StockLevel != nil {
+		existingVariant.StockLevel = *variantDTO.StockLevel
+	}
+
+	// 5. Check if a variant with these updated attributes already exists
+	if (variantDTO.ProductID != nil || variantDTO.Weight != nil || variantDTO.Grind != nil) &&
+		(variantDTO.ProductID != nil && *variantDTO.ProductID != existingVariant.ProductID ||
+			variantDTO.Weight != nil && *variantDTO.Weight != existingVariant.Weight ||
+			variantDTO.Grind != nil && *variantDTO.Grind != existingVariant.Grind) {
+
+		productID := existingVariant.ProductID
+		if variantDTO.ProductID != nil {
+			productID = *variantDTO.ProductID
+		}
+
+		weight := existingVariant.Weight
+		if variantDTO.Weight != nil {
+			weight = *variantDTO.Weight
+		}
+
+		grind := existingVariant.Grind
+		if variantDTO.Grind != nil {
+			grind = *variantDTO.Grind
+		}
+
+		// Check if another variant with these attributes exists
+		otherVariant, err := s.variantRepo.GetByAttributes(ctx, productID, weight, grind)
+		if err != nil {
+			s.logger.Error().
+				Str("function", "variantService.Update").
+				Err(err).
+				Str("product_id", productID.String()).
+				Str("weight", weight).
+				Str("grind", grind).
+				Msg("Error checking for existing variant")
+			return nil, fmt.Errorf("error checking for existing variant: %w", err)
+		}
+
+		if otherVariant != nil && otherVariant.ID != id {
+			s.logger.Error().
+				Str("function", "variantService.Update").
+				Str("product_id", productID.String()).
+				Str("weight", weight).
+				Str("grind", grind).
+				Str("existing_variant_id", otherVariant.ID.String()).
+				Msg("Another variant with these attributes already exists")
+			return nil, fmt.Errorf("another variant with these attributes already exists")
+		}
+	}
+
+	// 6. Update in database
+	existingVariant.UpdatedAt = time.Now()
+
+	s.logger.Debug().
+		Str("function", "variantService.Update").
+		Str("variant_id", id.String()).
+		Msg("Updating variant in database")
+
+	if err := s.variantRepo.Update(ctx, existingVariant); err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Update").
+			Err(err).
+			Str("variant_id", id.String()).
+			Msg("Failed to update variant in database")
+		return nil, fmt.Errorf("failed to update variant in database: %w", err)
+	}
+
+	s.logger.Info().
+		Str("function", "variantService.Update").
+		Str("variant_id", existingVariant.ID.String()).
+		Str("product_id", existingVariant.ProductID.String()).
+		Str("price_id", existingVariant.PriceID.String()).
+		Str("weight", existingVariant.Weight).
+		Str("grind", existingVariant.Grind).
+		Int("stock_level", existingVariant.StockLevel).
+		Msg("Variant successfully updated")
+
+	return existingVariant, nil
+}
+
+// Delete removes a variant from the system
+func (s *variantService) Delete(ctx context.Context, id uuid.UUID) error {
+	s.logger.Debug().
+		Str("function", "variantService.Delete").
+		Str("variant_id", id.String()).
+		Msg("Starting variant deletion")
+
+	// 1. Get existing variant from repository
+	s.logger.Debug().
+		Str("function", "variantService.Delete").
+		Str("variant_id", id.String()).
+		Msg("Retrieving variant from repository")
+
+	variant, err := s.variantRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Delete").
+			Err(err).
+			Str("variant_id", id.String()).
+			Msg("Failed to retrieve variant")
+		return fmt.Errorf("failed to retrieve variant for deletion: %w", err)
+	}
+
+	if variant == nil {
+		s.logger.Error().
+			Str("function", "variantService.Delete").
+			Str("variant_id", id.String()).
+			Msg("Variant not found")
+		return fmt.Errorf("variant with ID %s not found", id)
+	}
+
+	s.logger.Debug().
+		Str("function", "variantService.Delete").
+		Str("variant_id", id.String()).
+		Str("product_id", variant.ProductID.String()).
+		Str("weight", variant.Weight).
+		Str("grind", variant.Grind).
+		Msg("Variant found, proceeding with deletion")
+
+	// 2. TODO: Check if there are any active subscriptions using this variant
+	// If implementing this check, add appropriate repository method and code here
+
+	// 3. Delete from database
+	s.logger.Debug().
+		Str("function", "variantService.Delete").
+		Str("variant_id", id.String()).
+		Msg("Deleting variant from database")
+
+	err = s.variantRepo.Delete(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "variantService.Delete").
+			Err(err).
+			Str("variant_id", id.String()).
+			Msg("Failed to delete variant from database")
+		return fmt.Errorf("failed to delete variant from database: %w", err)
+	}
+
+	// Not done yet...
+	return nil
+}
+
+func (s *variantService) UpdateStockLevel(ctx context.Context, id uuid.UUID, quantity int) error {
+	return nil
+}
+func (s *variantService) GetAvailableOptions() (*dto.VariantOptionsResponse, error) {
+	return nil, nil
+}
