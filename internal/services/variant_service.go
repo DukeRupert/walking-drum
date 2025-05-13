@@ -368,7 +368,6 @@ func (s *variantService) GenerateVariantsForProduct(ctx context.Context, product
 			}
 
 			// Create subscription price if the product allows subscriptions
-			var subscriptionPriceID uuid.UUID
 			if product.AllowSubscription {
 				stripeSubPrice, err := s.stripeClient.CreatePrice(ctx, &stripe.PriceCreateParams{
 					ProductID:  stripeProduct.ID,
@@ -422,8 +421,6 @@ func (s *variantService) GenerateVariantsForProduct(ctx context.Context, product
 						Msg("Failed to save subscription price to database")
 					return fmt.Errorf("failed to save subscription price to database: %w", err)
 				}
-
-				subscriptionPriceID = subscriptionPrice.ID
 			}
 
 			// Create the variant in our database
@@ -699,11 +696,10 @@ func (s *variantService) List(ctx context.Context, offset, limit int, activeOnly
 		Int("total_count", total).
 		Msg("Successfully retrieved variants from repository")
 
-	// Enhance variants with product and price details
-	variantsWithDetails := make([]*models.VariantWithDetails, 0, len(variants))
-
+	// For logging/debugging purposes, we can still fetch the details
+	// but will return just the variants as required by the interface
 	for _, variant := range variants {
-		// Get product details
+		// Get product details for logging
 		product, err := s.productRepo.GetByID(ctx, variant.ProductID)
 		if err != nil {
 			s.logger.Warn().
@@ -715,7 +711,7 @@ func (s *variantService) List(ctx context.Context, offset, limit int, activeOnly
 			continue
 		}
 
-		// Get price details
+		// Get price details for logging
 		price, err := s.priceRepo.GetByID(ctx, variant.PriceID)
 		if err != nil {
 			s.logger.Warn().
@@ -727,32 +723,27 @@ func (s *variantService) List(ctx context.Context, offset, limit int, activeOnly
 			continue
 		}
 
-		// Create enhanced variant with details
-		variantWithDetails := &models.VariantWithDetails{
-			Variant:      *variant,
-			ProductName:  product.Name,
-			ProductImage: product.ImageURL,
-			Origin:       product.Origin,
-			RoastLevel:   product.RoastLevel,
-			FlavorNotes:  product.FlavorNotes,
-			Amount:       price.Amount,
-			Currency:     price.Currency,
-			PriceName:    price.Name,
-		}
-
-		variantsWithDetails = append(variantsWithDetails, variantWithDetails)
+		// Just log the details rather than building a new structure
+		s.logger.Debug().
+			Str("variant_id", variant.ID.String()).
+			Str("product_name", product.Name).
+			Str("price_name", price.Name).
+			Int64("amount", price.Amount).
+			Str("weight", variant.Weight).
+			Str("grind", variant.Grind).
+			Msg("Variant details")
 	}
 
 	s.logger.Info().
 		Str("function", "variantService.List").
 		Int("total_variants", total).
-		Int("returned_variants", len(variantsWithDetails)).
+		Int("returned_variants", len(variants)).
 		Int("offset", offset).
 		Int("limit", limit).
 		Bool("activeOnly", activeOnly).
 		Msg("Variant listing completed successfully")
 
-	return variantsWithDetails, total, nil
+	return variants, total, nil
 }
 
 // Update updates an existing variant
@@ -1091,7 +1082,6 @@ func (s *variantService) UpdateVariantsForProduct(ctx context.Context, product *
 		}
 
 		// Create subscription price if the product allows subscriptions
-		var subscriptionPriceID uuid.UUID
 		if product.AllowSubscription {
 			stripeSubPrice, err := s.stripeClient.CreatePrice(ctx, &stripe.PriceCreateParams{
 				ProductID:  stripeProduct.ID,
@@ -1145,8 +1135,6 @@ func (s *variantService) UpdateVariantsForProduct(ctx context.Context, product *
 					Msg("Failed to save subscription price to database")
 				return fmt.Errorf("failed to save subscription price to database: %w", err)
 			}
-
-			subscriptionPriceID = subscriptionPrice.ID
 		}
 
 		// Create the variant in our database
