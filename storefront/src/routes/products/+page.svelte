@@ -1,9 +1,54 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
-	import { goto } from '$app/navigation';
+	import { cart } from '$lib/stores/cart';
+	import type { Price, Product } from '$lib/types';
+	import { onMount } from 'svelte';
 
 	let { data }: PageProps = $props();
 	let { products, prices, error } = $derived(data);
+
+	// Track quantities locally
+	let quantities: Record<string, number> = $state({});
+
+	function addToCart(product: Product, price: Price) {
+		const quantity = quantities[price.id] || 1;
+		cart.addItem(product, price, quantity);
+
+		// Show confirmation message
+		showAddedToCart(product.name, price.name);
+	}
+
+	// Added to cart notification
+	let notification = $state({ show: false, message: '' });
+
+	function showAddedToCart(productName: string, priceName: string) {
+		notification = {
+			show: true,
+			message: `Added ${productName} - ${priceName} to your cart`
+		};
+
+		// Hide notification after 3 seconds
+		setTimeout(() => {
+			notification = { ...notification, show: false };
+		}, 3000);
+	}
+
+	// Handle quantity change
+	function updateQuantity(priceId: string, event: Event) {
+		const selectElement = event.target as HTMLSelectElement;
+		quantities[priceId] = parseInt(selectElement.value, 10);
+	}
+
+	onMount(() => {
+		// Initialize quantities for each price
+		if (prices) {
+			prices.forEach((price) => {
+				if (quantities[price.id] === undefined) {
+					quantities[price.id] = 1;
+				}
+			});
+		}
+	});
 </script>
 
 <svelte:head>
@@ -14,6 +59,12 @@
 	<h1>Coffee Subscriptions</h1>
 	<p>Select your favorite coffee and subscription plan</p>
 </div>
+
+{#if notification.show}
+	<div class="notification">
+		<p>{notification.message}</p>
+	</div>
+{/if}
 
 {#if error}
 	<div class="error-container">
@@ -36,7 +87,8 @@
 			<div class="product-card">
 				<div class="product-image">
 					<img
-						src={product.image_url || 'https://unsplash.com/photos/coffee-bean-lot-TD4DBagg2wE'}
+						src={product.image_url ||
+							'https://images.unsplash.com/photo-1611854779393-1b2da9d400fe?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y29mZmVlJTIwYmVhbnxlbnwwfHwwfHx8MA%3D%3D'}
 						alt={product.name}
 					/>
 				</div>
@@ -74,7 +126,11 @@
 										<!-- Add quantity selector -->
 										<div class="quantity-selector">
 											<label for="quantity-{price.id}">Quantity:</label>
-											<select id="quantity-{price.id}" bind:value={price.quantity}>
+											<select
+												id="quantity-{price.id}"
+												value={quantities[price.id]}
+												onchange={(e) => updateQuantity(price.id, e)}
+											>
 												<option value="1">1</option>
 												<option value="2">2</option>
 												<option value="3">3</option>
@@ -83,11 +139,7 @@
 											</select>
 										</div>
 
-										<button
-											onclick={() => goto(`/checkout/${price.id}?quantity=${price.quantity || 1}`)}
-										>
-											Subscribe
-										</button>
+										<button onclick={() => addToCart(product, price)}> Add to Cart </button>
 									</div>
 								{/each}
 							</div>
@@ -205,9 +257,51 @@
 		color: var(--color-muted);
 	}
 
+	.quantity-selector {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.quantity-selector label {
+		font-size: 0.9rem;
+		color: var(--color-muted);
+	}
+
+	.quantity-selector select {
+		padding: 0.3rem 0.5rem;
+		border-radius: var(--radius);
+		border: 1px solid var(--color-border);
+		background-color: white;
+	}
+
 	.no-prices {
 		color: var(--color-muted);
 		font-style: italic;
+	}
+
+	.notification {
+		position: fixed;
+		top: 20px;
+		right: 20px;
+		background-color: var(--color-success);
+		color: white;
+		padding: 1rem;
+		border-radius: var(--radius);
+		box-shadow: var(--shadow);
+		z-index: 1000;
+		animation: slideIn 0.3s ease-out;
+	}
+
+	@keyframes slideIn {
+		from {
+			transform: translateX(100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateX(0);
+			opacity: 1;
+		}
 	}
 
 	@media (max-width: 768px) {
@@ -230,22 +324,7 @@
 		}
 
 		.quantity-selector {
-			display: flex;
-			align-items: center;
-			gap: 0.5rem;
 			margin-bottom: 1rem;
-		}
-
-		.quantity-selector label {
-			font-size: 0.9rem;
-			color: var(--color-muted);
-		}
-
-		.quantity-selector select {
-			padding: 0.3rem 0.5rem;
-			border-radius: var(--radius);
-			border: 1px solid var(--color-border);
-			background-color: white;
 		}
 
 		button {

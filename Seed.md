@@ -80,3 +80,28 @@ curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v
     "active": true
   }'
 ```
+
+## Customers
+
+### Create
+```bash
+curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/customers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "frodo.baggins@shire.me",
+    "first_name": "Frodo",
+    "last_name": "Baggins",
+    "phone_number": "+44123456789"
+  }'
+```
+
+```bash
+curl -X POST https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/customers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "gandalf@white-council.me",
+    "first_name": "Gandalf",
+    "last_name": "Grey",
+    "phone_number": "+44987654321"
+  }'
+```

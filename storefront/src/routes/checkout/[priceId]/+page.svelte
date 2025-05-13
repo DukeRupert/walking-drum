@@ -8,6 +8,7 @@
 
 	let { data }: PageProps = $props();
 	let { price, product, quantity, customer, error } = $derived(data);
+	$inspect(data)
 
 	let loading = $state(false);
 	let checkoutError: string | null = $state(null);
