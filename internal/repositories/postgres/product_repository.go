@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -39,20 +40,26 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 	product.CreatedAt = now
 	product.UpdatedAt = now
 
+	// Convert Options map to JSON string for storage
+	optionsJSON, err := json.Marshal(product.Options)
+	if err != nil {
+		return fmt.Errorf("failed to marshal options: %w", err)
+	}
+
 	query := `
 		INSERT INTO products (
 			id, name, description, image_url, active, stock_level,
-			weight, origin, roast_level, flavor_notes, stripe_id,
+			weight, origin, roast_level, flavor_notes, options, allow_subscription, stripe_id,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13
+			$7, $8, $9, $10, $11, $12, $13,
+			$14, $15
 		)
 	`
 
 	// Access the underlying *sql.DB through our custom DB type
-	_, err := r.db.ExecContext(
+	_, err = r.db.ExecContext(
 		ctx,
 		query,
 		product.ID,
@@ -65,6 +72,8 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 		product.Origin,
 		product.RoastLevel,
 		product.FlavorNotes,
+		optionsJSON,
+		product.AllowSubscription,
 		product.StripeID,
 		product.CreatedAt,
 		product.UpdatedAt,
@@ -80,15 +89,17 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 // GetByID retrieves a product by its ID
 func (r *ProductRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Product, error) {
 	query := `
-		SELECT
+		SELECT 
 			id, name, description, image_url, active, stock_level,
-			weight, origin, roast_level, flavor_notes, stripe_id,
+			weight, origin, roast_level, flavor_notes, options, allow_subscription, stripe_id,
 			created_at, updated_at
 		FROM products
 		WHERE id = $1
 	`
 
 	var product models.Product
+	var optionsJSON []byte
+
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&product.ID,
 		&product.Name,
@@ -100,6 +111,8 @@ func (r *ProductRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 		&product.Origin,
 		&product.RoastLevel,
 		&product.FlavorNotes,
+		&optionsJSON,
+		&product.AllowSubscription,
 		&product.StripeID,
 		&product.CreatedAt,
 		&product.UpdatedAt,
@@ -112,21 +125,33 @@ func (r *ProductRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
 
+	// Unmarshal the options JSON
+	if len(optionsJSON) > 0 {
+		if err := json.Unmarshal(optionsJSON, &product.Options); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal options: %w", err)
+		}
+	} else {
+		// Initialize empty map if no options stored
+		product.Options = make(map[string][]string)
+	}
+
 	return &product, nil
 }
 
 // GetByStripeID retrieves a product by its Stripe ID
 func (r *ProductRepository) GetByStripeID(ctx context.Context, stripeID string) (*models.Product, error) {
 	query := `
-		SELECT
+		SELECT 
 			id, name, description, image_url, active, stock_level,
-			weight, origin, roast_level, flavor_notes, stripe_id,
+			weight, origin, roast_level, flavor_notes, options, allow_subscription, stripe_id,
 			created_at, updated_at
 		FROM products
 		WHERE stripe_id = $1
 	`
 
 	var product models.Product
+	var optionsJSON []byte
+
 	err := r.db.QueryRowContext(ctx, query, stripeID).Scan(
 		&product.ID,
 		&product.Name,
@@ -138,6 +163,8 @@ func (r *ProductRepository) GetByStripeID(ctx context.Context, stripeID string) 
 		&product.Origin,
 		&product.RoastLevel,
 		&product.FlavorNotes,
+		&optionsJSON,
+		&product.AllowSubscription,
 		&product.StripeID,
 		&product.CreatedAt,
 		&product.UpdatedAt,
@@ -148,6 +175,15 @@ func (r *ProductRepository) GetByStripeID(ctx context.Context, stripeID string) 
 			return nil, fmt.Errorf("product with Stripe ID %s not found", stripeID)
 		}
 		return nil, fmt.Errorf("failed to get product: %w", err)
+	}
+
+	// Unmarshal the options JSON
+	if len(optionsJSON) > 0 {
+		if err := json.Unmarshal(optionsJSON, &product.Options); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal options: %w", err)
+		}
+	} else {
+		product.Options = make(map[string][]string)
 	}
 
 	return &product, nil
@@ -164,9 +200,9 @@ func (r *ProductRepository) List(ctx context.Context, offset, limit int, include
 
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM products %s", whereClause)
 	listQuery := fmt.Sprintf(`
-		SELECT
+		SELECT 
 			id, name, description, image_url, active, stock_level,
-			weight, origin, roast_level, flavor_notes, stripe_id,
+			weight, origin, roast_level, flavor_notes, options, allow_subscription, stripe_id,
 			created_at, updated_at
 		FROM products
 		%s
@@ -199,6 +235,8 @@ func (r *ProductRepository) List(ctx context.Context, offset, limit int, include
 	products := make([]*models.Product, 0)
 	for rows.Next() {
 		var product models.Product
+		var optionsJSON []byte
+
 		err := rows.Scan(
 			&product.ID,
 			&product.Name,
@@ -210,6 +248,8 @@ func (r *ProductRepository) List(ctx context.Context, offset, limit int, include
 			&product.Origin,
 			&product.RoastLevel,
 			&product.FlavorNotes,
+			&optionsJSON,
+			&product.AllowSubscription,
 			&product.StripeID,
 			&product.CreatedAt,
 			&product.UpdatedAt,
@@ -217,6 +257,16 @@ func (r *ProductRepository) List(ctx context.Context, offset, limit int, include
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan product: %w", err)
 		}
+
+		// Unmarshal the options JSON
+		if len(optionsJSON) > 0 {
+			if err := json.Unmarshal(optionsJSON, &product.Options); err != nil {
+				return nil, 0, fmt.Errorf("failed to unmarshal options for product %s: %w", product.ID, err)
+			}
+		} else {
+			product.Options = make(map[string][]string)
+		}
+
 		products = append(products, &product)
 	}
 
@@ -231,6 +281,12 @@ func (r *ProductRepository) List(ctx context.Context, offset, limit int, include
 func (r *ProductRepository) Update(ctx context.Context, product *models.Product) error {
 	product.UpdatedAt = time.Now()
 
+	// Convert Options map to JSON string for storage
+	optionsJSON, err := json.Marshal(product.Options)
+	if err != nil {
+		return fmt.Errorf("failed to marshal options: %w", err)
+	}
+
 	query := `
 		UPDATE products SET
 			name = $1,
@@ -242,9 +298,11 @@ func (r *ProductRepository) Update(ctx context.Context, product *models.Product)
 			origin = $7,
 			roast_level = $8,
 			flavor_notes = $9,
-			stripe_id = $10,
-			updated_at = $11
-		WHERE id = $12
+			options = $10,
+			allow_subscription = $11,
+			stripe_id = $12,
+			updated_at = $13
+		WHERE id = $14
 	`
 
 	result, err := r.db.ExecContext(
@@ -259,6 +317,8 @@ func (r *ProductRepository) Update(ctx context.Context, product *models.Product)
 		product.Origin,
 		product.RoastLevel,
 		product.FlavorNotes,
+		optionsJSON,
+		product.AllowSubscription,
 		product.StripeID,
 		product.UpdatedAt,
 		product.ID,
