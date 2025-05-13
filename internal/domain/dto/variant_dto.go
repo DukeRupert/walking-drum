@@ -131,8 +131,7 @@ func isValidGrind(grind string) bool {
 
 // VariantListResponse represents a paginated list of variants
 type VariantListResponse struct {
-	Data       []*VariantResponse `json:"data"`
-	Pagination Pagination         `json:"pagination"`
+	Data []*VariantResponse `json:"data"`
 }
 
 // VariantResponse represents a variant with product details for API responses

@@ -31,32 +31,7 @@ func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 }
 
-func run(ctx context.Context, args []string, w io.Writer) error {
-	// Initialize logger
-	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-
-	debug := flag.Bool("debug", false, "sets log level to debug")
-
-	flag.Parse()
-	// Default level for this example is info, unless debug flag is present
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	if *debug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	}
-
-	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to load configuration")
-	}
-
-	// Initialize database
-	db, err := postgres.Connect(cfg.DB, &logger)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to connect to database")
-	}
-	defer db.Close()
-
+func runMigrations(cfg *config.Config, logger *zerolog.Logger) {
 	// Run migrations
 	m, err := migrate.New(
 		"file://migrations",
@@ -104,6 +79,36 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	if dbErr != nil {
 		logger.Warn().Err(dbErr).Msg("Error closing migration database connection")
 	}
+}
+
+func run(ctx context.Context, args []string, w io.Writer) error {
+	// Initialize logger
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	debug := flag.Bool("debug", false, "sets log level to debug")
+
+	flag.Parse()
+	// Default level for this example is info, unless debug flag is present
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if *debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to load configuration")
+	}
+
+	// Initialize database
+	db, err := postgres.Connect(cfg.DB, &logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to connect to database")
+	}
+	defer db.Close()
+
+	// Run migrations
+	runMigrations(cfg, &logger)
 
 	// Initialize Stripe client
 	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey, logger)

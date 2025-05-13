@@ -8,18 +8,19 @@ import (
 	"time"
 
 	"github.com/dukerupert/walking-drum/internal/domain/models"
+	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
 // variantRepository implements the VariantRepository interface
 type variantRepository struct {
-	db     *sql.DB
+	db     *DB
 	logger *zerolog.Logger
 }
 
 // NewVariantRepository creates a new variant repository
-func NewVariantRepository(db *sql.DB, logger *zerolog.Logger) VariantRepository {
+func NewVariantRepository(db *DB, logger *zerolog.Logger) interfaces.VariantRepository {
 	return &variantRepository{
 		db:     db,
 		logger: logger,
@@ -29,8 +30,8 @@ func NewVariantRepository(db *sql.DB, logger *zerolog.Logger) VariantRepository 
 // GetByID retrieves a variant by ID
 func (r *variantRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Variant, error) {
 	query := `
-		SELECT id, product_id, price_id, stripe_price_id, 
-			   weight, grind, active, stock_level, 
+		SELECT id, product_id, price_id, stripe_price_id,
+			   weight, grind, active, stock_level,
 			   created_at, updated_at
 		FROM variants
 		WHERE id = $1
@@ -62,8 +63,8 @@ func (r *variantRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 // GetByProductID retrieves variants by product ID
 func (r *variantRepository) GetByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Variant, error) {
 	query := `
-		SELECT id, product_id, price_id, stripe_price_id, 
-			   weight, grind, active, stock_level, 
+		SELECT id, product_id, price_id, stripe_price_id,
+			   weight, grind, active, stock_level,
 			   created_at, updated_at
 		FROM variants
 		WHERE product_id = $1
@@ -107,8 +108,8 @@ func (r *variantRepository) GetByProductID(ctx context.Context, productID uuid.U
 // GetByAttributes retrieves a variant by product ID, weight, and grind
 func (r *variantRepository) GetByAttributes(ctx context.Context, productID uuid.UUID, weight string, grind string) (*models.Variant, error) {
 	query := `
-		SELECT id, product_id, price_id, stripe_price_id, 
-			   weight, grind, active, stock_level, 
+		SELECT id, product_id, price_id, stripe_price_id,
+			   weight, grind, active, stock_level,
 			   created_at, updated_at
 		FROM variants
 		WHERE product_id = $1 AND weight = $2 AND grind = $3
@@ -153,8 +154,8 @@ func (r *variantRepository) List(ctx context.Context, limit, offset int, activeO
 
 	// Then, get the paginated results
 	query := `
-		SELECT id, product_id, price_id, stripe_price_id, 
-			   weight, grind, active, stock_level, 
+		SELECT id, product_id, price_id, stripe_price_id,
+			   weight, grind, active, stock_level,
 			   created_at, updated_at
 		FROM variants
 	`

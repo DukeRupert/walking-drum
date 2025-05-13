@@ -21,6 +21,7 @@ type DB struct {
 // Repositories holds all repository instances
 type Repositories struct {
 	Product      interfaces.ProductRepository
+	Variant      interfaces.VariantRepository
 	Price        interfaces.PriceRepository
 	Customer     interfaces.CustomerRepository
 	Subscription interfaces.SubscriptionRepository
@@ -28,9 +29,9 @@ type Repositories struct {
 
 // NewRepositories initializes all repositories
 func NewRepositories(db *DB, logger *zerolog.Logger) *Repositories {
-	sublogger := logger.With().Str("component", "repository").Logger()
 	return &Repositories{
-		Product:      NewProductRepository(db, sublogger),
+		Product:      NewProductRepository(db, logger),
+		Variant:      NewVariantRepository(db, logger),
 		Price:        NewPriceRepository(db),
 		Customer:     NewCustomerRepository(db),
 		Subscription: NewSubscriptionRepository(db),
@@ -70,7 +71,7 @@ func Connect(dbConfig config.DBConfig, logger *zerolog.Logger) (*DB, error) {
 		}
 		logger.Info().Msg(fmt.Sprintf("Created database %s", dbConfig.Name))
 	}
-	
+
 	// Create the database connection
 	db, err := sql.Open("postgres", dbConfig.DSN)
 	if err != nil {
