@@ -5,6 +5,10 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"time"
+	
+	"github.com/dukerupert/walking-drum/internal/domain/models"
+	"github.com/google/uuid"
 )
 
 // Validator is an object that can be validated
@@ -75,28 +79,55 @@ func (p *ProductCreateDTO) Valid(ctx context.Context) map[string]string {
 	}
 
 	// Validate options
-	if p.Options != nil {
-		for key, values := range p.Options {
-			if !validOptionKeys[key] {
-				problems["options."+key] = "is not a valid option key"
-			}
-			if len(values) == 0 {
-				problems["options."+key] = "must have at least one value"
-			}
+	if p.Options == nil {
+		p.Options = make(map[string][]string)
+	}
+	
+	for key, values := range p.Options {
+		if !validOptionKeys[key] {
+			problems["options."+key] = "is not a valid option key"
 		}
+		if len(values) == 0 {
+			problems["options."+key] = "must have at least one value"
+		}
+	}
 
-		// Check that weight and grind options are defined if product allows subscription
-		if p.AllowSubscription {
-			if _, hasWeight := p.Options["weight"]; !hasWeight {
-				problems["options.weight"] = "weight options are required for subscription products"
-			}
-			if _, hasGrind := p.Options["grind"]; !hasGrind {
-				problems["options.grind"] = "grind options are required for subscription products"
-			}
+	// Check that weight and grind options are defined if product allows subscription
+	if p.AllowSubscription {
+		if _, hasWeight := p.Options["weight"]; !hasWeight {
+			problems["options.weight"] = "weight options are required for subscription products"
+		}
+		if _, hasGrind := p.Options["grind"]; !hasGrind {
+			problems["options.grind"] = "grind options are required for subscription products"
 		}
 	}
 
 	return problems
+}
+
+// ToModel converts ProductCreateDTO to a Product model
+func (p *ProductCreateDTO) ToModel() *models.Product {
+	// Initialize options if nil
+	if p.Options == nil {
+		p.Options = make(map[string][]string)
+	}
+
+	return &models.Product{
+		ID:                uuid.New(),
+		Name:              p.Name,
+		Description:       p.Description,
+		ImageURL:          p.ImageURL,
+		Active:            p.Active,
+		StockLevel:        p.StockLevel,
+		Weight:            p.Weight,
+		Origin:            p.Origin,
+		RoastLevel:        p.RoastLevel,
+		FlavorNotes:       p.FlavorNotes,
+		Options:           p.Options,
+		AllowSubscription: p.AllowSubscription,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
 }
 
 // ProductUpdateDTO represents the data needed to update a product
@@ -184,6 +215,8 @@ func (dto *ProductUpdateDTO) Valid(ctx context.Context) map[string]string {
 		}
 
 		// Check that weight and grind options are defined if product allows subscription
+		// Only check this if AllowSubscription is changing to true OR
+		// if we're updating options for a product that already allows subscriptions
 		if dto.AllowSubscription != nil && *dto.AllowSubscription {
 			options := *dto.Options
 			if _, hasWeight := options["weight"]; !hasWeight {
@@ -196,6 +229,44 @@ func (dto *ProductUpdateDTO) Valid(ctx context.Context) map[string]string {
 	}
 
 	return problems
+}
+
+// ApplyToModel applies the non-nil fields from the DTO to the product model
+func (dto *ProductUpdateDTO) ApplyToModel(product *models.Product) {
+	if dto.Name != nil {
+		product.Name = *dto.Name
+	}
+	if dto.Description != nil {
+		product.Description = *dto.Description
+	}
+	if dto.ImageURL != nil {
+		product.ImageURL = *dto.ImageURL
+	}
+	if dto.Active != nil {
+		product.Active = *dto.Active
+	}
+	if dto.StockLevel != nil {
+		product.StockLevel = *dto.StockLevel
+	}
+	if dto.Weight != nil {
+		product.Weight = *dto.Weight
+	}
+	if dto.Origin != nil {
+		product.Origin = *dto.Origin
+	}
+	if dto.RoastLevel != nil {
+		product.RoastLevel = *dto.RoastLevel
+	}
+	if dto.FlavorNotes != nil {
+		product.FlavorNotes = *dto.FlavorNotes
+	}
+	if dto.Options != nil {
+		product.Options = *dto.Options
+	}
+	if dto.AllowSubscription != nil {
+		product.AllowSubscription = *dto.AllowSubscription
+	}
+	product.UpdatedAt = time.Now()
 }
 
 // ProductResponseDTO represents the data returned to the client
@@ -214,4 +285,30 @@ type ProductResponseDTO struct {
 	AllowSubscription bool                `json:"allow_subscription"`
 	CreatedAt         string              `json:"created_at"`
 	UpdatedAt         string              `json:"updated_at"`
+}
+
+// FromModel converts a Product model to ProductResponseDTO
+func ProductResponseDTOFromModel(product *models.Product) ProductResponseDTO {
+	// Ensure options is initialized
+	options := product.Options
+	if options == nil {
+		options = make(map[string][]string)
+	}
+	
+	return ProductResponseDTO{
+		ID:                product.ID.String(),
+		Name:              product.Name,
+		Description:       product.Description,
+		ImageURL:          product.ImageURL,
+		Active:            product.Active,
+		StockLevel:        product.StockLevel,
+		Weight:            product.Weight,
+		Origin:            product.Origin,
+		RoastLevel:        product.RoastLevel,
+		FlavorNotes:       product.FlavorNotes,
+		Options:           options,
+		AllowSubscription: product.AllowSubscription,
+		CreatedAt:         product.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:         product.UpdatedAt.Format(time.RFC3339),
+	}
 }
