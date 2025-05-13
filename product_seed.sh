@@ -23,7 +23,11 @@ cloud9=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134080/RockabillyRoasting/Cloud_9_a3mgso.jpg",
   "active": true,
   "stock_level": 100,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Whole Bean", "Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Blend - Three Coffee Regions",
   "roast_level": "Full City",
   "flavor_notes": "Berry top notes, sweet orange-citrus acidity, smooth dark chocolate, brown sugar, crisp clean finish",
@@ -42,7 +46,11 @@ two_stroke=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134085/RockabillyRoasting/2-Stroke_frl4ox.jpg",
   "active": true,
   "stock_level": 85,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Whole Bean", "Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Central & South America",
   "roast_level": "Medium",
   "flavor_notes": "Sweet top notes, toasted nuts, chocolate undertones, buttery smooth finish",
@@ -61,7 +69,11 @@ chop_top=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134083/RockabillyRoasting/Chop_Top_zdszo5.jpg",
   "active": true,
   "stock_level": 75,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Whole Bean", "Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Central America & East Africa",
   "roast_level": "Medium",
   "flavor_notes": "Rummy fruit notes, raisin richness, silky-smooth body, subtle acidity, clean finish",
@@ -80,7 +92,11 @@ ethiopia=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134081/RockabillyRoasting/Ethiopia_p6y6td.jpg",
   "active": true,
   "stock_level": 90,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Whole Bean", "Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Ethiopia",
   "roast_level": "Light-Medium",
   "flavor_notes": "Bright opening, sweet lemon citrus, clean dry finish, subtle berry and floral undertones",
@@ -99,7 +115,11 @@ guatemala_tikal=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134083/RockabillyRoasting/Guatemalan_fzq6gh.jpg",
   "active": true,
   "stock_level": 80,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Whole Bean", "Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Guatemala",
   "roast_level": "Medium",
   "flavor_notes": "Dark chocolate richness, bright red apple notes, honey-sweet finish",
@@ -109,7 +129,7 @@ guatemala_tikal=$(cat <<EOF
 EOF
 )
 
-# White Coffee
+# White Coffee - Note: Only available as ground, so different options
 white_coffee=$(cat <<EOF
 {
   "id": "white-coffee",
@@ -118,7 +138,11 @@ white_coffee=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134081/RockabillyRoasting/White_Coffee_pkcyol.jpg",
   "active": true,
   "stock_level": 65,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Specialty Blend",
   "roast_level": "Light (Under-roasted)",
   "flavor_notes": "Nutty, electric flavor, high caffeine content",
@@ -137,7 +161,11 @@ cascadia_decaf=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134080/RockabillyRoasting/Cascadia_q2qqqr.jpg",
   "active": true,
   "stock_level": 70,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Whole Bean", "Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Blend - Indonesia, Central & South America",
   "roast_level": "Medium",
   "flavor_notes": "Clean, sweet, balanced",
@@ -156,7 +184,11 @@ bike_blend=$(cat <<EOF
   "image_url": "https://res.cloudinary.com/rr-wholesale/image/upload/v1723134081/RockabillyRoasting/Bike_Blend_ad3t9v.jpg",
   "active": true,
   "stock_level": 85,
-  "weight": 12,
+  "options": {
+    "weight": ["12oz", "3lb", "5lb"],
+    "grind": ["Whole Bean", "Drip Ground"]
+  },
+  "allow_subscription": true,
   "origin": "Central America & East Africa",
   "roast_level": "Medium",
   "flavor_notes": "Fruit top notes, moderate acidity, savory caramel, full-bodied baker's chocolate finish",
