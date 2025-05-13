@@ -17,15 +17,15 @@ import (
 
 // ProductRepository implements the interfaces.ProductRepository interface
 type ProductRepository struct {
-	db *DB
+	db     *DB
 	logger zerolog.Logger
 }
 
 // NewProductRepository creates a new ProductRepository
-func NewProductRepository(db *DB, logger zerolog.Logger) interfaces.ProductRepository {
+func NewProductRepository(db *DB, logger *zerolog.Logger) interfaces.ProductRepository {
 	return &ProductRepository{
-		db: db,
-		logger: logger,
+		db:     db,
+		logger: logger.With().Str("component", "product_repository").Logger(),
 	}
 }
 
@@ -41,12 +41,12 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 
 	query := `
 		INSERT INTO products (
-			id, name, description, image_url, active, stock_level, 
-			weight, origin, roast_level, flavor_notes, stripe_id, 
+			id, name, description, image_url, active, stock_level,
+			weight, origin, roast_level, flavor_notes, stripe_id,
 			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, 
-			$7, $8, $9, $10, $11, 
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11,
 			$12, $13
 		)
 	`
@@ -80,7 +80,7 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 // GetByID retrieves a product by its ID
 func (r *ProductRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Product, error) {
 	query := `
-		SELECT 
+		SELECT
 			id, name, description, image_url, active, stock_level,
 			weight, origin, roast_level, flavor_notes, stripe_id,
 			created_at, updated_at
@@ -118,7 +118,7 @@ func (r *ProductRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 // GetByStripeID retrieves a product by its Stripe ID
 func (r *ProductRepository) GetByStripeID(ctx context.Context, stripeID string) (*models.Product, error) {
 	query := `
-		SELECT 
+		SELECT
 			id, name, description, image_url, active, stock_level,
 			weight, origin, roast_level, flavor_notes, stripe_id,
 			created_at, updated_at
@@ -164,7 +164,7 @@ func (r *ProductRepository) List(ctx context.Context, offset, limit int, include
 
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM products %s", whereClause)
 	listQuery := fmt.Sprintf(`
-		SELECT 
+		SELECT
 			id, name, description, image_url, active, stock_level,
 			weight, origin, roast_level, flavor_notes, stripe_id,
 			created_at, updated_at

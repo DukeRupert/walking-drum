@@ -21,7 +21,18 @@ func (s *Server) setupRoutes() {
 	products.PUT("/:id", s.productHandler.Update)
 	products.DELETE("/:id", s.productHandler.Delete)
 	products.PATCH("/:id/stock", s.productHandler.UpdateStockLevel)
-	
+
+	// Add variant routes
+	variants := v1.Group("/variants")
+	variants.POST("", s.variantHandler.Create)
+	variants.GET("", s.variantHandler.List)
+	variants.GET("/:id", s.variantHandler.Get)
+	variants.GET("/product/:productId", s.variantHandler.GetByProductID)
+	variants.GET("/options", s.variantHandler.GetOptions)
+	variants.PUT("/:id", s.variantHandler.Update)
+	variants.DELETE("/:id", s.variantHandler.Delete)
+	variants.PATCH("/:id/stock", s.variantHandler.UpdateStockLevel)
+
 	// Price routes
 	prices := v1.Group("/prices")
 	prices.POST("", s.priceHandler.Create)
@@ -30,7 +41,7 @@ func (s *Server) setupRoutes() {
 	prices.PUT("/:id", s.priceHandler.Update)
 	prices.DELETE("/:id", s.priceHandler.Delete)
 	products.GET("/product/:productId", s.priceHandler.ListByProduct)
-	
+
 	// Customer routes
 	customers := v1.Group("/customers")
 	customers.POST("", s.customerHandler.Create)
@@ -39,7 +50,7 @@ func (s *Server) setupRoutes() {
 	customers.GET("/email/:email", s.customerHandler.GetByEmail)
 	customers.PUT("/:id", s.customerHandler.Update)
 	customers.DELETE("/:id", s.customerHandler.Delete)
-	
+
 	// Subscription routes
 	subscriptions := v1.Group("/subscriptions")
 	subscriptions.POST("", s.subscriptionHandler.Create)
@@ -59,7 +70,7 @@ func (s *Server) setupRoutes() {
 
 	// Webhook route - no authentication middleware for this route
 	v1.POST("/webhooks/stripe", s.webhookHandler.HandleWebhook)
-	
+
 	// Health check route
 	s.echo.GET("/healthz", func(c echo.Context) error {
 		return c.String(200, "OK")

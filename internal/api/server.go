@@ -22,6 +22,7 @@ type Server struct {
 	db                  *postgres.DB
 	logger              *zerolog.Logger
 	productHandler      *handlers.ProductHandler
+	variantHandler      *handlers.VariantHandler
 	priceHandler        *handlers.PriceHandler
 	customerHandler     *handlers.CustomerHandler
 	subscriptionHandler *handlers.SubscriptionHandler
@@ -35,6 +36,7 @@ func NewServer(
 	db *postgres.DB,
 	logger *zerolog.Logger,
 	productHandler *handlers.ProductHandler,
+	variantHandler *handlers.VariantHandler,
 	priceHandler *handlers.PriceHandler,
 	customerHandler *handlers.CustomerHandler,
 	subscriptionHandler *handlers.SubscriptionHandler,
@@ -51,10 +53,10 @@ func NewServer(
 	e.Use(custommiddleware.RequestLogger(logger))
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-        AllowOrigins: []string{"*"},  // For development. In production, specify your frontend URL
-        AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
-        AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
-    }))
+		AllowOrigins: []string{"*"}, // For development. In production, specify your frontend URL
+		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+	}))
 
 	// Create server
 	server := &Server{
@@ -62,11 +64,12 @@ func NewServer(
 		config:              cfg,
 		db:                  db,
 		productHandler:      productHandler,
+		variantHandler:      variantHandler,
 		priceHandler:        priceHandler,
 		customerHandler:     customerHandler,
 		subscriptionHandler: subscriptionHandler,
 		webhookHandler:      webhookHandler,
-		checkoutHandler: 	 checkoutHandler,
+		checkoutHandler:     checkoutHandler,
 	}
 
 	// Setup router
