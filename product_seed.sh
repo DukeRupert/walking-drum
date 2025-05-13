@@ -2,7 +2,7 @@
 
 # Script to seed coffee product data
 # Replace the API URL with your actual API endpoint
-API_URL="https://localhost:8080/api/v1/products"
+API_URL="http://localhost:8080/api/v1/products"
 
 # Helper function to make API calls
 create_product() {
