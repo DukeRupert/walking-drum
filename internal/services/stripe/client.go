@@ -44,7 +44,7 @@ type client struct {
 }
 
 // NewClient creates a new Stripe client
-func NewClient(secretKey string, logger zerolog.Logger) StripeService {
+func NewClient(secretKey string, logger *zerolog.Logger) StripeService {
 	// Ensure the key is not empty
 	if secretKey == "" {
 		// Log this error
@@ -60,6 +60,6 @@ func NewClient(secretKey string, logger zerolog.Logger) StripeService {
 
 	return &client{
 		api:    api,
-		logger: logger.With().Str("service", "stripe").Logger(),
+		logger: logger.With().Str("component", "stripe_service").Logger(),
 	}
 }

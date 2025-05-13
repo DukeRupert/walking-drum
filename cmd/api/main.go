@@ -20,10 +20,7 @@ import (
 
 	"github.com/dukerupert/walking-drum/internal/api"
 	"github.com/dukerupert/walking-drum/internal/config"
-	"github.com/dukerupert/walking-drum/internal/handlers"
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
-	"github.com/dukerupert/walking-drum/internal/services"
-	"github.com/dukerupert/walking-drum/internal/services/stripe"
 )
 
 func init() {
@@ -31,13 +28,14 @@ func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 }
 
-func runMigrations(cfg *config.Config, logger *zerolog.Logger) {
+func runMigrations(cfg *config.Config, logger *zerolog.Logger) error {
 	// Run migrations
 	m, err := migrate.New(
 		"file://migrations",
 		cfg.DB.MigrateURL)
 	if err != nil {
-		logger.Fatal().Err(err).Str("migrateURL", cfg.DB.MigrateURL).Msg("Failed to create migration instance")
+		logger.Error().Err(err).Str("migrateURL", cfg.DB.MigrateURL).Msg("Failed to create migration instance")
+		return fmt.Errorf("failed to create migration instance: %w", err)
 	}
 
 	// Log migration source and database URL
@@ -62,8 +60,7 @@ func runMigrations(cfg *config.Config, logger *zerolog.Logger) {
 			logger.Info().Msg("No migration changes detected")
 		} else {
 			logger.Error().Err(err).Msg("Migration failed")
-			// Consider whether to exit or continue
-			// log.Fatal().Err(err).Msg("Migration failed, cannot continue")
+			return fmt.Errorf("migration failed: %w", err)
 		}
 	} else {
 		// Get the new version after successful migration
@@ -79,6 +76,17 @@ func runMigrations(cfg *config.Config, logger *zerolog.Logger) {
 	if dbErr != nil {
 		logger.Warn().Err(dbErr).Msg("Error closing migration database connection")
 	}
+
+	// If both closing errors occurred, return a combined error
+	if srcErr != nil && dbErr != nil {
+		return fmt.Errorf("failed to close migration resources: %v, %v", srcErr, dbErr)
+	} else if srcErr != nil {
+		return fmt.Errorf("failed to close migration source: %w", srcErr)
+	} else if dbErr != nil {
+		return fmt.Errorf("failed to close migration database connection: %w", dbErr)
+	}
+
+	return nil
 }
 
 func run(ctx context.Context, args []string, w io.Writer) error {
@@ -108,49 +116,15 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 	defer db.Close()
 
 	// Run migrations
-	runMigrations(cfg, &logger)
-
-	// Initialize Stripe client
-	stripeClient := stripe.NewClient(cfg.Stripe.SecretKey, logger)
-
-	// Initialize repositories
-	repos := postgres.NewRepositories(db, &logger)
-
-	// Initialize services
-	productService := services.NewProductService(repos.Product, stripeClient, &logger)
-	variantService := services.NewVariantService(repos.Variant, repos.Product, repos.Price, &logger)
-	priceService := services.NewPriceService(repos.Price, repos.Product, stripeClient, &logger)
-	customerService := services.NewCustomerService(repos.Customer, stripeClient, &logger)
-	subscriptionService := services.NewSubscriptionService(
-		repos.Subscription,
-		repos.Customer,
-		repos.Product,
-		repos.Price,
-		stripeClient,
-		&logger,
-	)
-
-	// Initialize handlers
-	productHandler := handlers.NewProductHandler(productService, &logger)
-	variantHandler := handlers.NewVariantHandler(variantService, &logger)
-	priceHandler := handlers.NewPriceHandler(priceService, &logger)
-	customerHandler := handlers.NewCustomerHandler(customerService, &logger)
-	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService)
-	webhookHandler := handlers.NewWebhookHandler(logger, stripeClient, cfg.Stripe.WebhookSecret)
-	checkoutHandler := handlers.NewCheckoutHandler(&logger, stripeClient, productService, priceService, customerService, subscriptionService)
+	if err := runMigrations(cfg, &logger); err != nil {
+        logger.Fatal().Err(err).Msg("Fatal migration error")
+    }
 
 	// Initialize server with handlers
 	server := api.NewServer(
 		cfg,
 		db,
 		&logger,
-		productHandler,
-		variantHandler,
-		priceHandler,
-		customerHandler,
-		subscriptionHandler,
-		webhookHandler,
-		checkoutHandler,
 	)
 
 	// Start the server in a goroutine

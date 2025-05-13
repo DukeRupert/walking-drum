@@ -4,17 +4,20 @@ package handlers
 import (
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
 )
 
 // SubscriptionHandler handles HTTP requests for subscriptions
 type SubscriptionHandler struct {
 	subscriptionService services.SubscriptionService
+	logger	zerolog.Logger
 }
 
 // NewSubscriptionHandler creates a new subscription handler
-func NewSubscriptionHandler(subscriptionService services.SubscriptionService) *SubscriptionHandler {
+func NewSubscriptionHandler(subscriptionService services.SubscriptionService, logger *zerolog.Logger) *SubscriptionHandler {
 	return &SubscriptionHandler{
 		subscriptionService: subscriptionService,
+		logger: logger.With().Str("component", "subscription_service").Logger(),
 	}
 }
 

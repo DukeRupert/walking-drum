@@ -28,7 +28,7 @@ type Repositories struct {
 }
 
 // NewRepositories initializes all repositories
-func NewRepositories(db *DB, logger *zerolog.Logger) *Repositories {
+func CreateRepositories(db *DB, logger *zerolog.Logger) *Repositories {
 	return &Repositories{
 		Product:      NewProductRepository(db, logger),
 		Variant:      NewVariantRepository(db, logger),

@@ -10,6 +10,7 @@ import (
 	"github.com/dukerupert/walking-drum/internal/handlers"
 	custommiddleware "github.com/dukerupert/walking-drum/internal/middleware"
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
+	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog"
@@ -17,17 +18,11 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	echo                *echo.Echo
-	config              *config.Config
-	db                  *postgres.DB
-	logger              *zerolog.Logger
-	productHandler      *handlers.ProductHandler
-	variantHandler      *handlers.VariantHandler
-	priceHandler        *handlers.PriceHandler
-	customerHandler     *handlers.CustomerHandler
-	subscriptionHandler *handlers.SubscriptionHandler
-	webhookHandler      *handlers.WebhookHandler
-	checkoutHandler     *handlers.CheckoutHandler
+	echo    *echo.Echo
+	config  *config.Config
+	db      *postgres.DB
+	logger  *zerolog.Logger
+	handler *handlers.Handlers
 }
 
 // NewServer creates a new server instance with all its dependencies
@@ -35,13 +30,6 @@ func NewServer(
 	cfg *config.Config,
 	db *postgres.DB,
 	logger *zerolog.Logger,
-	productHandler *handlers.ProductHandler,
-	variantHandler *handlers.VariantHandler,
-	priceHandler *handlers.PriceHandler,
-	customerHandler *handlers.CustomerHandler,
-	subscriptionHandler *handlers.SubscriptionHandler,
-	webhookHandler *handlers.WebhookHandler,
-	checkoutHandler *handlers.CheckoutHandler,
 ) *Server {
 	e := echo.New()
 
@@ -58,18 +46,21 @@ func NewServer(
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
 	}))
 
+	// Initialize repositories
+	r := postgres.CreateRepositories(db, logger)
+
+	// Initialize services
+	s := services.CreateServices(cfg, r, logger)
+
+	// Initialize handlers
+	h := handlers.CreateHandlers(cfg, s, logger)
+
 	// Create server
 	server := &Server{
-		echo:                e,
-		config:              cfg,
-		db:                  db,
-		productHandler:      productHandler,
-		variantHandler:      variantHandler,
-		priceHandler:        priceHandler,
-		customerHandler:     customerHandler,
-		subscriptionHandler: subscriptionHandler,
-		webhookHandler:      webhookHandler,
-		checkoutHandler:     checkoutHandler,
+		echo:    e,
+		config:  cfg,
+		db:      db,
+		handler: h,
 	}
 
 	// Setup router

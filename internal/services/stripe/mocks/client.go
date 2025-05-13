@@ -28,13 +28,13 @@ func (m *Client) ListProducts(ctx context.Context, limit int, active *bool) ([]*
 // CreateProduct mocks the CreateProduct method
 func (m *Client) CreateProduct(ctx context.Context, params *stripe.ProductCreateParams) (*stripego.Product, error) {
 	args := m.Called(ctx, params)
-	
+
 	// Handle the first return value (could be nil)
 	var product *stripego.Product
 	if args.Get(0) != nil {
 		product = args.Get(0).(*stripego.Product)
 	}
-	
+
 	return product, args.Error(1)
 }
 
@@ -72,6 +72,10 @@ func (m *Client) ArchivePrice(ctx context.Context, stripeID string) error {
 	return nil
 }
 
+func (m *Client) RetrieveSubscription(subscriptionID string) (*stripego.Subscription, error) {
+	return nil, nil
+}
+
 func (m *Client) CreateCustomer(ctx context.Context, params *stripe.CustomerCreateParams) (*stripego.Customer, error) {
 	return nil, nil
 }
@@ -87,5 +91,9 @@ func (m *Client) CreateEmbeddedCheckoutSession(
 }
 
 func (m *Client) RetrieveCheckoutSession(sessionID string) (*stripego.CheckoutSession, error) {
+	return nil, nil
+}
+
+func (m *Client) CreateMultiItemCheckoutSession(customerStripeID string, items []stripe.CheckoutItem, metadata map[string]string, returnURL string) (*stripego.CheckoutSession, error) {
 	return nil, nil
 }

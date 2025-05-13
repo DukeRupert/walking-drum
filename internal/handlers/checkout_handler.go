@@ -27,12 +27,12 @@ type CheckoutHandler struct {
 
 // NewCheckoutHandler creates a new checkout handler
 func NewCheckoutHandler(
-	logger *zerolog.Logger,
 	stripeClient stripe.StripeService,
 	productService services.ProductService,
 	priceService services.PriceService,
 	customerService services.CustomerService,
 	subscriptionService services.SubscriptionService,
+	logger *zerolog.Logger,
 ) *CheckoutHandler {
 	return &CheckoutHandler{
 		logger:             logger,
