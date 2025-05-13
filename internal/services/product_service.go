@@ -48,15 +48,11 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		Interface("productDTO", productDTO).
 		Msg("Starting product creation")
 
-	// 1. Validate productDTO
-	if problems := productDTO.Valid(ctx); len(problems) > 0 {
-		s.logger.Error().
-			Str("function", "productService.Create").
-			Interface("problems", problems).
-			Msg("Product validation failed")
-		return nil, fmt.Errorf("invalid product data: %v", problems)
-	}
-
+	// Validate
+    if problems := productDTO.Valid(ctx); len(problems) > 0 {
+        return nil, fmt.Errorf("invalid product data: %v", problems)
+    }
+	
 	s.logger.Debug().
 		Str("function", "productService.Create").
 		Msg("Product validation passed")
@@ -96,25 +92,8 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		Str("stripeProductID", stripeProduct.ID).
 		Msg("Successfully created product in Stripe")
 
-	// 3. Create product in local database
-	now := time.Now()
-	product := &models.Product{
-		ID:                uuid.New(),
-		Name:              productDTO.Name,
-		Description:       productDTO.Description,
-		ImageURL:          productDTO.ImageURL,
-		Active:            productDTO.Active,
-		StockLevel:        productDTO.StockLevel,
-		Weight:            productDTO.Weight,
-		Origin:            productDTO.Origin,
-		RoastLevel:        productDTO.RoastLevel,
-		FlavorNotes:       productDTO.FlavorNotes,
-		Options:           productDTO.Options,
-		AllowSubscription: productDTO.AllowSubscription,
-		StripeID:          stripeProduct.ID,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
+	// 3. Convert DTO to model
+    product := productDTO.ToModel()
 
 	s.logger.Debug().
 		Str("function", "productService.Create").
@@ -344,6 +323,11 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 		requestID = reqID
 	}
 
+	// Validate
+    if problems := productDTO.Valid(ctx); len(problems) > 0 {
+        return nil, fmt.Errorf("invalid product data: %v", problems)
+    }
+
 	// 1. Get existing product
 	existingProduct, err := s.productRepo.GetByID(ctx, id)
 	if err != nil {
@@ -375,41 +359,7 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 
 	// 2. Update fields from DTO
 	// Only update fields that are provided in the DTO
-	if productDTO.Name != nil {
-		existingProduct.Name = *productDTO.Name
-	}
-	if productDTO.Description != nil {
-		existingProduct.Description = *productDTO.Description
-	}
-	if productDTO.ImageURL != nil {
-		existingProduct.ImageURL = *productDTO.ImageURL
-	}
-	if productDTO.Active != nil {
-		existingProduct.Active = *productDTO.Active
-	}
-	if productDTO.StockLevel != nil {
-		existingProduct.StockLevel = *productDTO.StockLevel
-	}
-	if productDTO.Weight != nil {
-		existingProduct.Weight = *productDTO.Weight
-	}
-	if productDTO.Origin != nil {
-		existingProduct.Origin = *productDTO.Origin
-	}
-	if productDTO.RoastLevel != nil {
-		existingProduct.RoastLevel = *productDTO.RoastLevel
-	}
-	if productDTO.FlavorNotes != nil {
-		existingProduct.FlavorNotes = *productDTO.FlavorNotes
-	}
-	if productDTO.Options != nil {
-		existingProduct.Options = *productDTO.Options
-	}
-	if productDTO.AllowSubscription != nil {
-		existingProduct.AllowSubscription = *productDTO.AllowSubscription
-	}
-
-	existingProduct.UpdatedAt = time.Now()
+    productDTO.ApplyToModel(existingProduct)
 
 	// 3. Update in Stripe if product has a Stripe ID
 	if existingProduct.StripeID != "" {

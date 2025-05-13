@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
-	"github.com/dukerupert/walking-drum/internal/domain/models"
 	"github.com/dukerupert/walking-drum/internal/services"
 	"github.com/dukerupert/walking-drum/pkg/pagination"
 	"github.com/google/uuid"
@@ -233,21 +232,8 @@ func (h *ProductHandler) Get(c echo.Context) error {
 		Msg("Product retrieved successfully")
 
 	// 3. Return appropriate response
-	resp := models.Product{
-		ID:          product.ID,
-		Name:        product.Name,
-		Description: product.Description,
-		ImageURL:    product.ImageURL,
-		Active:      product.Active,
-		StockLevel:  product.StockLevel,
-		Weight:      product.Weight,
-		Origin:      product.Origin,
-		RoastLevel:  product.RoastLevel,
-		FlavorNotes: product.FlavorNotes,
-		StripeID:    product.StripeID,
-		CreatedAt:   product.CreatedAt,
-		UpdatedAt:   product.UpdatedAt,
-	}
+	    // Convert to response DTO
+    response := dto.ProductResponseDTOFromModel(product)
 
 	h.logger.Info().
 		Str("handler", "ProductHandler.Get").
@@ -257,7 +243,7 @@ func (h *ProductHandler) Get(c echo.Context) error {
 		Int("status_code", http.StatusOK).
 		Msg("Successfully returned product details")
 
-	return c.JSON(http.StatusOK, resp)
+	return c.JSON(http.StatusOK, response)
 }
 
 // List handles GET /api/products
