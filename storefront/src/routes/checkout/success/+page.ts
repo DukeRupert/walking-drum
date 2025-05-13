@@ -1,7 +1,7 @@
 import type { PageLoad } from './$types';
 import { PUBLIC_API_BASE_URL } from '$env/static/public';
 
-export const load: PageLoad = async ({ url }) => {
+export const load: PageLoad = async ({ url, fetch }) => {
   const sessionId = url.searchParams.get('session_id');
   
   if (!sessionId) {
@@ -11,8 +11,7 @@ export const load: PageLoad = async ({ url }) => {
   }
   
   try {
-    // In a production app, you'd verify the session with your backend
-    // This is a simplified example
+    // Verify the session with backend
     const response = await fetch(`${PUBLIC_API_BASE_URL}/checkout/verify-session?session_id=${sessionId}`);
     
     if (!response.ok) {
@@ -23,7 +22,7 @@ export const load: PageLoad = async ({ url }) => {
     
     return {
       sessionId,
-      subscription: data.subscription
+      subscriptions: data.subscriptions || [data.subscription] // Handle both single and multiple subscriptions
     };
   } catch (error) {
     console.error('Error verifying session:', error);
@@ -31,15 +30,17 @@ export const load: PageLoad = async ({ url }) => {
     // For the POC, we'll simulate a successful subscription
     return {
       sessionId,
-      subscription: {
-        id: sessionId,
-        product_name: 'Cloud 9 Espresso',
-        amount: 1620,
-        currency: 'usd',
-        interval: 'week',
-        next_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      }
+      subscriptions: [
+        {
+          id: 'sub_example1',
+          product_name: 'Cloud 9 Espresso',
+          amount: 1620,
+          currency: 'usd',
+          interval: 'week',
+          quantity: 2,
+          next_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        }
+      ]
     };
   }
-  };
-  
+};

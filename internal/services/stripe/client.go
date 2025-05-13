@@ -29,14 +29,8 @@ type StripeService interface {
 	ArchivePrice(ctx context.Context, stripeID string) error
 
 	// Checkout
-	CreateEmbeddedCheckoutSession(
-		customerStripeID string,
-		priceStripeID string,
-		productName string,
-		quantity int,
-		returnURL string,
-	) (*stripe.CheckoutSession, error)
-
+	CreateEmbeddedCheckoutSession(customerStripeID, priceStripeID, productName string, quantity int, returnURL string) (*stripe.CheckoutSession, error)
+	CreateMultiItemCheckoutSession(customerStripeID string, items []CheckoutItem, metadata map[string]string, returnURL string) (*stripe.CheckoutSession, error)
 	RetrieveCheckoutSession(sessionID string) (*stripe.CheckoutSession, error)
 }
 
