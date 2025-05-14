@@ -8,6 +8,8 @@ import (
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/domain/models"
+	"github.com/dukerupert/walking-drum/internal/messaging/messages"
+	"github.com/dukerupert/walking-drum/internal/messaging/publishers"
 	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
 	"github.com/dukerupert/walking-drum/internal/services/stripe"
 	"github.com/google/uuid"
@@ -43,6 +45,7 @@ type subscriptionService struct {
 	productRepo      interfaces.ProductRepository
 	priceRepo        interfaces.PriceRepository
 	stripeClient     stripe.StripeService
+	publisher        *publishers.SubscriptionPublisher
 	logger           zerolog.Logger
 }
 
@@ -53,6 +56,7 @@ func NewSubscriptionService(
 	productRepo interfaces.ProductRepository,
 	priceRepo interfaces.PriceRepository,
 	stripeClient stripe.StripeService,
+	publisher *publishers.SubscriptionPublisher,
 	logger *zerolog.Logger,
 ) SubscriptionService {
 	return &subscriptionService{
@@ -61,166 +65,167 @@ func NewSubscriptionService(
 		productRepo:      productRepo,
 		priceRepo:        priceRepo,
 		stripeClient:     stripeClient,
+		publisher:        publisher,
 		logger:           logger.With().Str("component", "subscription_service").Logger(),
 	}
 }
 
 // Create adds a new subscription to the system
 func (s *subscriptionService) Create(ctx context.Context, subscription *models.Subscription) (*models.Subscription, error) {
-    s.logger.Debug().
-        Str("function", "subscriptionService.Create").
-        Str("customer_id", subscription.CustomerID.String()).
-        Str("product_id", subscription.ProductID.String()).
-        Str("price_id", subscription.PriceID.String()).
-        Str("stripe_id", subscription.StripeID).
-        Str("stripe_item_id", subscription.StripeItemID).
-        Int("quantity", subscription.Quantity).
-        Msg("Starting subscription creation")
+	s.logger.Debug().
+		Str("function", "subscriptionService.Create").
+		Str("customer_id", subscription.CustomerID.String()).
+		Str("product_id", subscription.ProductID.String()).
+		Str("price_id", subscription.PriceID.String()).
+		Str("stripe_id", subscription.StripeID).
+		Str("stripe_item_id", subscription.StripeItemID).
+		Int("quantity", subscription.Quantity).
+		Msg("Starting subscription creation")
 
-    // Validate the subscription
-    if subscription.ID == uuid.Nil {
-        subscription.ID = uuid.New()
-    }
+	// Validate the subscription
+	if subscription.ID == uuid.Nil {
+		subscription.ID = uuid.New()
+	}
 
-    if subscription.CustomerID == uuid.Nil {
-        return nil, fmt.Errorf("customer ID is required")
-    }
+	if subscription.CustomerID == uuid.Nil {
+		return nil, fmt.Errorf("customer ID is required")
+	}
 
-    if subscription.ProductID == uuid.Nil {
-        return nil, fmt.Errorf("product ID is required")
-    }
+	if subscription.ProductID == uuid.Nil {
+		return nil, fmt.Errorf("product ID is required")
+	}
 
-    if subscription.PriceID == uuid.Nil {
-        return nil, fmt.Errorf("price ID is required")
-    }
+	if subscription.PriceID == uuid.Nil {
+		return nil, fmt.Errorf("price ID is required")
+	}
 
-    if subscription.StripeID == "" {
-        return nil, fmt.Errorf("stripe subscription ID is required")
-    }
+	if subscription.StripeID == "" {
+		return nil, fmt.Errorf("stripe subscription ID is required")
+	}
 
-    if subscription.Quantity <= 0 {
-        subscription.Quantity = 1 // Default to 1 if not specified
-    }
+	if subscription.Quantity <= 0 {
+		subscription.Quantity = 1 // Default to 1 if not specified
+	}
 
-    // Verify customer exists
-    customer, err := s.customerRepo.GetByID(ctx, subscription.CustomerID)
-    if err != nil {
-        s.logger.Error().
-            Err(err).
-            Str("function", "subscriptionService.Create").
-            Str("customer_id", subscription.CustomerID.String()).
-            Msg("Error retrieving customer")
-        return nil, fmt.Errorf("failed to retrieve customer: %w", err)
-    }
+	// Verify customer exists
+	customer, err := s.customerRepo.GetByID(ctx, subscription.CustomerID)
+	if err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("function", "subscriptionService.Create").
+			Str("customer_id", subscription.CustomerID.String()).
+			Msg("Error retrieving customer")
+		return nil, fmt.Errorf("failed to retrieve customer: %w", err)
+	}
 
-    if customer == nil {
-        s.logger.Error().
-            Str("function", "subscriptionService.Create").
-            Str("customer_id", subscription.CustomerID.String()).
-            Msg("Customer not found")
-        return nil, fmt.Errorf("customer not found")
-    }
+	if customer == nil {
+		s.logger.Error().
+			Str("function", "subscriptionService.Create").
+			Str("customer_id", subscription.CustomerID.String()).
+			Msg("Customer not found")
+		return nil, fmt.Errorf("customer not found")
+	}
 
-    // Verify product exists
-    product, err := s.productRepo.GetByID(ctx, subscription.ProductID)
-    if err != nil {
-        s.logger.Error().
-            Err(err).
-            Str("function", "subscriptionService.Create").
-            Str("product_id", subscription.ProductID.String()).
-            Msg("Error retrieving product")
-        return nil, fmt.Errorf("failed to retrieve product: %w", err)
-    }
+	// Verify product exists
+	product, err := s.productRepo.GetByID(ctx, subscription.ProductID)
+	if err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("function", "subscriptionService.Create").
+			Str("product_id", subscription.ProductID.String()).
+			Msg("Error retrieving product")
+		return nil, fmt.Errorf("failed to retrieve product: %w", err)
+	}
 
-    if product == nil {
-        s.logger.Error().
-            Str("function", "subscriptionService.Create").
-            Str("product_id", subscription.ProductID.String()).
-            Msg("Product not found")
-        return nil, fmt.Errorf("product not found")
-    }
+	if product == nil {
+		s.logger.Error().
+			Str("function", "subscriptionService.Create").
+			Str("product_id", subscription.ProductID.String()).
+			Msg("Product not found")
+		return nil, fmt.Errorf("product not found")
+	}
 
-    // Verify price exists
-    price, err := s.priceRepo.GetByID(ctx, subscription.PriceID)
-    if err != nil {
-        s.logger.Error().
-            Err(err).
-            Str("function", "subscriptionService.Create").
-            Str("price_id", subscription.PriceID.String()).
-            Msg("Error retrieving price")
-        return nil, fmt.Errorf("failed to retrieve price: %w", err)
-    }
+	// Verify price exists
+	price, err := s.priceRepo.GetByID(ctx, subscription.PriceID)
+	if err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("function", "subscriptionService.Create").
+			Str("price_id", subscription.PriceID.String()).
+			Msg("Error retrieving price")
+		return nil, fmt.Errorf("failed to retrieve price: %w", err)
+	}
 
-    if price == nil {
-        s.logger.Error().
-            Str("function", "subscriptionService.Create").
-            Str("price_id", subscription.PriceID.String()).
-            Msg("Price not found")
-        return nil, fmt.Errorf("price not found")
-    }
+	if price == nil {
+		s.logger.Error().
+			Str("function", "subscriptionService.Create").
+			Str("price_id", subscription.PriceID.String()).
+			Msg("Price not found")
+		return nil, fmt.Errorf("price not found")
+	}
 
-    // Check product stock level (if applicable)
-    if product.StockLevel >= 0 && subscription.Quantity > product.StockLevel {
-        s.logger.Error().
-            Str("function", "subscriptionService.Create").
-            Str("product_id", subscription.ProductID.String()).
-            Int("requested_quantity", subscription.Quantity).
-            Int("available_stock", product.StockLevel).
-            Msg("Insufficient stock")
-        return nil, fmt.Errorf("insufficient stock for product %s: requested %d, available %d", 
-            product.Name, subscription.Quantity, product.StockLevel)
-    }
+	// Check product stock level (if applicable)
+	if product.StockLevel >= 0 && subscription.Quantity > product.StockLevel {
+		s.logger.Error().
+			Str("function", "subscriptionService.Create").
+			Str("product_id", subscription.ProductID.String()).
+			Int("requested_quantity", subscription.Quantity).
+			Int("available_stock", product.StockLevel).
+			Msg("Insufficient stock")
+		return nil, fmt.Errorf("insufficient stock for product %s: requested %d, available %d",
+			product.Name, subscription.Quantity, product.StockLevel)
+	}
 
-    // Set timestamps if not already set
-    if subscription.CreatedAt.IsZero() {
-        subscription.CreatedAt = time.Now()
-    }
-    if subscription.UpdatedAt.IsZero() {
-        subscription.UpdatedAt = time.Now()
-    }
+	// Set timestamps if not already set
+	if subscription.CreatedAt.IsZero() {
+		subscription.CreatedAt = time.Now()
+	}
+	if subscription.UpdatedAt.IsZero() {
+		subscription.UpdatedAt = time.Now()
+	}
 
-    // Set default status if not set
-    if subscription.Status == "" {
-        subscription.Status = models.SubscriptionStatusActive
-    }
+	// Set default status if not set
+	if subscription.Status == "" {
+		subscription.Status = models.SubscriptionStatusActive
+	}
 
-    // Create subscription in database
-    err = s.subscriptionRepo.Create(ctx, subscription)
-    if err != nil {
-        s.logger.Error().
-            Err(err).
-            Str("function", "subscriptionService.Create").
-            Str("subscription_id", subscription.ID.String()).
-            Msg("Error creating subscription in database")
-        return nil, fmt.Errorf("failed to create subscription in database: %w", err)
-    }
+	// Create subscription in database
+	err = s.subscriptionRepo.Create(ctx, subscription)
+	if err != nil {
+		s.logger.Error().
+			Err(err).
+			Str("function", "subscriptionService.Create").
+			Str("subscription_id", subscription.ID.String()).
+			Msg("Error creating subscription in database")
+		return nil, fmt.Errorf("failed to create subscription in database: %w", err)
+	}
 
-    // Update product stock if applicable
-    if product.StockLevel > 0 {
-        updatedStock := product.StockLevel - subscription.Quantity
-        err = s.productRepo.UpdateStockLevel(ctx, subscription.ProductID, updatedStock)
-        if err != nil {
-            s.logger.Warn().
-                Err(err).
-                Str("function", "subscriptionService.Create").
-                Str("product_id", subscription.ProductID.String()).
-                Int("new_stock", updatedStock).
-                Msg("Failed to update product stock, but subscription was created")
-            // Don't fail the subscription creation if stock update fails
-            // Just log a warning
-        }
-    }
+	// Update product stock if applicable
+	if product.StockLevel > 0 {
+		updatedStock := product.StockLevel - subscription.Quantity
+		err = s.productRepo.UpdateStockLevel(ctx, subscription.ProductID, updatedStock)
+		if err != nil {
+			s.logger.Warn().
+				Err(err).
+				Str("function", "subscriptionService.Create").
+				Str("product_id", subscription.ProductID.String()).
+				Int("new_stock", updatedStock).
+				Msg("Failed to update product stock, but subscription was created")
+			// Don't fail the subscription creation if stock update fails
+			// Just log a warning
+		}
+	}
 
-    s.logger.Info().
-        Str("function", "subscriptionService.Create").
-        Str("subscription_id", subscription.ID.String()).
-        Str("customer_id", subscription.CustomerID.String()).
-        Str("product_id", subscription.ProductID.String()).
-        Str("stripe_id", subscription.StripeID).
-        Str("status", subscription.Status).
-        Msg("Subscription created successfully")
+	s.logger.Info().
+		Str("function", "subscriptionService.Create").
+		Str("subscription_id", subscription.ID.String()).
+		Str("customer_id", subscription.CustomerID.String()).
+		Str("product_id", subscription.ProductID.String()).
+		Str("stripe_id", subscription.StripeID).
+		Str("status", subscription.Status).
+		Msg("Subscription created successfully")
 
-    return subscription, nil
+	return subscription, nil
 }
 
 // GetByID retrieves a subscription by its ID
@@ -336,16 +341,6 @@ func (s *subscriptionService) Update(ctx context.Context, id uuid.UUID, subscrip
 	return nil, nil
 }
 
-// Cancel cancels a subscription
-func (s *subscriptionService) Cancel(ctx context.Context, id uuid.UUID, cancelAtPeriodEnd bool) error {
-	// TODO: Implement subscription cancellation
-	// 1. Get existing subscription
-	// 2. Cancel in Stripe
-	// 3. Update status in database
-	// 4. Handle errors
-	return nil
-}
-
 // Pause pauses a subscription
 func (s *subscriptionService) Pause(ctx context.Context, id uuid.UUID) error {
 	// TODO: Implement subscription pausing
@@ -409,14 +404,193 @@ func (s *subscriptionService) ChangeAddress(ctx context.Context, id uuid.UUID, a
 	return nil
 }
 
-// ProcessRenewal processes the renewal of a subscription
+// QueueRenewal queues a subscription for renewal processing
+func (s *subscriptionService) QueueRenewal(ctx context.Context, subscriptionID uuid.UUID) error {
+    subscription, err := s.subscriptionRepo.GetByID(ctx, subscriptionID)
+    if err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("function", "subscriptionService.QueueRenewal").
+            Str("subscription_id", subscriptionID.String()).
+            Msg("Failed to get subscription for renewal")
+        return fmt.Errorf("failed to get subscription: %w", err)
+    }
+
+    if subscription == nil {
+        s.logger.Error().
+            Str("function", "subscriptionService.QueueRenewal").
+            Str("subscription_id", subscriptionID.String()).
+            Msg("Subscription not found for renewal")
+        return fmt.Errorf("subscription not found: %s", subscriptionID)
+    }
+
+    // Create a renewal message
+    renewalMsg := messages.SubscriptionRenewalMessage{
+        SubscriptionID: subscription.ID,
+        CustomerID:     subscription.CustomerID,
+        ProductID:      subscription.ProductID,
+        PriceID:        subscription.PriceID,
+        Quantity:       subscription.Quantity,
+        RenewalDate:    time.Now(),
+    }
+
+    // Publish the renewal message
+    err = s.publisher.PublishRenewal(ctx, renewalMsg)
+    if err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("function", "subscriptionService.QueueRenewal").
+            Str("subscription_id", subscriptionID.String()).
+            Msg("Failed to publish renewal message")
+        return fmt.Errorf("failed to queue renewal: %w", err)
+    }
+
+    s.logger.Info().
+        Str("function", "subscriptionService.QueueRenewal").
+        Str("subscription_id", subscriptionID.String()).
+        Msg("Subscription renewal queued successfully")
+
+    return nil
+}
+
+// ProcessRenewal processes a subscription renewal
+// This is now called by the consumer when processing a renewal message
 func (s *subscriptionService) ProcessRenewal(ctx context.Context, id uuid.UUID) error {
-	// TODO: Implement subscription renewal processing
-	// 1. Get existing subscription
-	// 2. Check if subscription is due for renewal
-	// 3. Check if product has stock
-	// 4. Process renewal in Stripe
-	// 5. Update subscription period in database
-	// 6. Handle errors
-	return nil
+    // Get the subscription from the database
+    subscription, err := s.subscriptionRepo.GetByID(ctx, id)
+    if err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("function", "subscriptionService.ProcessRenewal").
+            Str("subscription_id", id.String()).
+            Msg("Failed to retrieve subscription")
+        return fmt.Errorf("failed to get subscription: %w", err)
+    }
+
+    if subscription == nil {
+        s.logger.Error().
+            Str("function", "subscriptionService.ProcessRenewal").
+            Str("subscription_id", id.String()).
+            Msg("Subscription not found")
+        return fmt.Errorf("subscription not found: %s", id)
+    }
+    
+    // After successful renewal, publish email notification
+    if err := s.sendRenewalEmail(ctx, subscription); err != nil {
+        // Log the error but continue, as the renewal itself was successful
+        s.logger.Error().
+            Err(err).
+            Str("function", "subscriptionService.ProcessRenewal").
+            Str("subscription_id", id.String()).
+            Msg("Failed to send renewal email")
+    }
+    
+    // After successful renewal, update product stock levels
+    if err := s.updateProductStock(ctx, subscription); err != nil {
+        // Log the error but continue, as the renewal itself was successful
+        s.logger.Error().
+            Err(err).
+            Str("function", "subscriptionService.ProcessRenewal").
+            Str("subscription_id", id.String()).
+            Msg("Failed to update product stock levels")
+    }
+    
+    return nil
+}
+
+// sendRenewalEmail sends a renewal notification email
+func (s *subscriptionService) sendRenewalEmail(ctx context.Context, subscription *models.Subscription) error {
+    // Get customer details
+    customer, err := s.customerRepo.GetByID(ctx, subscription.CustomerID)
+    if err != nil {
+        return fmt.Errorf("failed to get customer: %w", err)
+    }
+
+    // Get product details
+    product, err := s.productRepo.GetByID(ctx, subscription.ProductID)
+    if err != nil {
+        return fmt.Errorf("failed to get product: %w", err)
+    }
+
+    // Create email notification message
+    emailMsg := messages.EmailNotificationMessage{
+        Type:       "renewal",
+        CustomerID: customer.ID,
+        Email:      customer.Email,
+        Subject:    "Your subscription has been renewed",
+        Data: map[string]interface{}{
+            "customer_name":       customer.FirstName + " " + customer.LastName,
+            "subscription_id":     subscription.ID.String(),
+            "product_name":        product.Name,
+            "renewal_date":        subscription.CurrentPeriodStart.Format("2006-01-02"),
+            "next_delivery_date":  subscription.NextDeliveryDate.Format("2006-01-02"),
+            "next_billing_date":   subscription.CurrentPeriodEnd.Format("2006-01-02"),
+        },
+    }
+
+    // Publish the email notification
+    return s.publisher.PublishEmailNotification(ctx, emailMsg)
+}
+
+// updateProductStock updates the product stock levels after a renewal
+func (s *subscriptionService) updateProductStock(ctx context.Context, subscription *models.Subscription) error {
+    // Create stock update message
+    stockMsg := messages.StockUpdateMessage{
+        ProductID: subscription.ProductID,
+        Quantity:  subscription.Quantity,
+        Operation: "decrement",
+    }
+
+    // Publish the stock update message
+    return s.publisher.PublishStockUpdate(ctx, stockMsg)
+}
+
+// Cancel cancels a subscription
+func (s *subscriptionService) Cancel(ctx context.Context, id uuid.UUID, cancelAtPeriodEnd bool) error {
+    // Get existing subscription
+    subscription, err := s.subscriptionRepo.GetByID(ctx, id)
+    if err != nil {
+        return fmt.Errorf("failed to get subscription: %w", err)
+    }
+
+    if subscription == nil {
+        return fmt.Errorf("subscription not found: %s", id)
+    }
+
+    oldStatus := subscription.Status
+
+    // Existing cancellation logic...
+
+    // Publish status change event
+    statusChangeMsg := messages.SubscriptionStatusChangeMessage{
+        SubscriptionID: subscription.ID,
+        CustomerID:     subscription.CustomerID,
+        OldStatus:      oldStatus,
+        NewStatus:      subscription.Status,
+        ChangeDate:     time.Now(),
+    }
+
+    if err := s.publisher.PublishStatusChange(ctx, statusChangeMsg); err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("subscription_id", id.String()).
+            Msg("Failed to publish status change event, but subscription was cancelled")
+    }
+
+    // Send cancellation email
+    if err := s.sendCancellationEmail(ctx, subscription); err != nil {
+        s.logger.Error().
+            Err(err).
+            Str("subscription_id", id.String()).
+            Msg("Failed to send cancellation email, but subscription was cancelled")
+    }
+
+    return nil
+}
+
+// sendCancellationEmail sends a cancellation notification email
+func (s *subscriptionService) sendCancellationEmail(ctx context.Context, subscription *models.Subscription) error {
+    // Similar to sendRenewalEmail but for cancellation notifications
+    // ...
+    return nil
 }

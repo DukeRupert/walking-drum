@@ -10,7 +10,7 @@ services:
       - APP_ENV=development
       - APP_PORT=8080
       - APP_DEBUG=true
-      - DB_HOST=postgres
+      - DB_HOST=localhost
       - DB_PORT=5432
       - DB_NAME=coffee_subscriptions
       - DB_USER=postgres
@@ -18,7 +18,7 @@ services:
       - DB_SSL_MODE=disable
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://guest:guest@localhost:5672/
       - RABBITMQ_EXCHANGE=coffee_subscription
       - EMAIL_PROVIDER=sendgrid
       - EMAIL_API_KEY=${EMAIL_API_KEY}

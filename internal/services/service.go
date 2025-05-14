@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/dukerupert/walking-drum/internal/config"
+	"github.com/dukerupert/walking-drum/internal/messaging/publishers"
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
 	"github.com/dukerupert/walking-drum/internal/services/stripe"
 	"github.com/rs/zerolog"
@@ -14,9 +15,10 @@ type Services struct {
 	Customer     CustomerService
 	Subscription SubscriptionService
 	Stripe       stripe.StripeService
+	Email        EmailService
 }
 
-func CreateServices(cfg *config.Config, repos *postgres.Repositories, logger *zerolog.Logger) *Services {
+func CreateServices(cfg *config.Config, repos *postgres.Repositories, subscriptionPublisher *publishers.SubscriptionPublisher, logger *zerolog.Logger) *Services {
 	// Initialize Stripe client
 	stripeService := stripe.NewClient(cfg.Stripe.SecretKey, logger)
 	productService := NewProductService(repos.Product, stripeService, logger)
@@ -29,8 +31,10 @@ func CreateServices(cfg *config.Config, repos *postgres.Repositories, logger *ze
 		repos.Product,
 		repos.Price,
 		stripeService,
+		subscriptionPublisher,
 		logger,
 	)
+	emailService := NewEmailService(cfg.Email, logger)
 
 	return &Services{
 		Product:      productService,
@@ -39,5 +43,6 @@ func CreateServices(cfg *config.Config, repos *postgres.Repositories, logger *ze
 		Customer:     customerService,
 		Subscription: subscriptionService,
 		Stripe:       stripeService,
+		Email:		  emailService,
 	}
 }
