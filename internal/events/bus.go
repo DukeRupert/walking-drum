@@ -15,10 +15,10 @@ import (
 type EventBus interface {
 	// Publish sends an event to the specified topic
 	Publish(topic string, payload interface{}) error
-	
+
 	// Subscribe registers a handler for events on the specified topic
 	Subscribe(topic string, handler func([]byte)) (*nats.Subscription, error)
-	
+
 	// Close closes the connection to the message bus
 	Close()
 }
@@ -41,7 +41,7 @@ type Event struct {
 // NewNATSEventBus creates a new NATS-based event bus
 func NewNATSEventBus(natsURL string, logger *zerolog.Logger) (*NATSEventBus, error) {
 	subLogger := logger.With().Str("component", "nats_event_bus").Logger()
-	
+
 	// Connect to NATS
 	subLogger.Info().Str("url", natsURL).Msg("Connecting to NATS")
 	nc, err := nats.Connect(natsURL,
@@ -70,7 +70,7 @@ func NewNATSEventBus(natsURL string, logger *zerolog.Logger) (*NATSEventBus, err
 	}
 
 	subLogger.Info().Msg("Successfully connected to NATS")
-	
+
 	return &NATSEventBus{
 		conn:      nc,
 		jetStream: js,
@@ -87,19 +87,19 @@ func (n *NATSEventBus) Publish(topic string, payload interface{}) error {
 		Timestamp: time.Now(),
 		Payload:   payload,
 	}
-	
+
 	// Marshal the event to JSON
 	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
-	
+
 	n.logger.Debug().
 		Str("topic", topic).
 		Str("event_id", event.ID).
 		Int("data_size", len(data)).
 		Msg("Publishing event")
-	
+
 	// Publish the event
 	return n.conn.Publish(topic, data)
 }
@@ -109,14 +109,14 @@ func (n *NATSEventBus) Subscribe(topic string, handler func([]byte)) (*nats.Subs
 	n.logger.Debug().
 		Str("topic", topic).
 		Msg("Subscribing to topic")
-	
+
 	// Subscribe to the topic
 	return n.conn.Subscribe(topic, func(msg *nats.Msg) {
 		n.logger.Debug().
 			Str("topic", topic).
 			Int("data_size", len(msg.Data)).
 			Msg("Received message")
-		
+
 		// Call the handler with the message data
 		handler(msg.Data)
 	})

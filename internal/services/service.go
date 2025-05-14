@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/dukerupert/walking-drum/internal/config"
+	"github.com/dukerupert/walking-drum/internal/events"
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
 	"github.com/dukerupert/walking-drum/internal/services/stripe"
 	"github.com/rs/zerolog"
@@ -16,10 +17,10 @@ type Services struct {
 	Stripe       stripe.StripeService
 }
 
-func CreateServices(cfg *config.Config, repos *postgres.Repositories, logger *zerolog.Logger) *Services {
+func CreateServices(cfg *config.Config, repos *postgres.Repositories, eventBus *events.NATSEventBus, logger *zerolog.Logger) *Services {
 	// Initialize Stripe client
 	stripeService := stripe.NewClient(cfg.Stripe.SecretKey, logger)
-	productService := NewProductService(repos.Product, stripeService, logger)
+	productService := NewProductService(repos.Product, stripeService, eventBus, logger)
 	variantService := NewVariantService(repos.Variant, repos.Product, repos.Price, stripeService, logger)
 	priceService := NewPriceService(repos.Price, repos.Product, stripeService, logger)
 	customerService := NewCustomerService(repos.Customer, stripeService, logger)

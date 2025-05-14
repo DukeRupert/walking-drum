@@ -12,12 +12,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config holds all configuration for the application
+// Add to your Config struct
 type Config struct {
-	App    AppConfig
-	DB     DBConfig
-	Stripe StripeConfig
-	JWT    JWTConfig
+	App        AppConfig
+	DB         DBConfig
+	Stripe     StripeConfig
+	JWT        JWTConfig
+	MessageBus MessageBusConfig // Add this line
 }
 
 // AppConfig holds application-specific configuration
@@ -52,6 +53,14 @@ type JWTConfig struct {
 	Expiration string
 }
 
+// MessageBusConfig holds configuration for the message bus
+type MessageBusConfig struct {
+	URL       string
+	Username  string
+	Password  string
+	Namespace string // prefix for all topics
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	// Load .env file if it exists
@@ -80,6 +89,12 @@ func Load() (*Config, error) {
 			Secret:     getEnv("JWT_SECRET", "your_jwt_secret_key"),
 			Expiration: getEnv("JWT_EXPIRATION", "24h"),
 		},
+		MessageBus: MessageBusConfig{
+			URL:       getEnv("NATS_URL", "nats://localhost:4222"),
+			Username:  getEnv("NATS_USERNAME", ""),
+			Password:  getEnv("NATS_PASSWORD", ""),
+			Namespace: getEnv("NATS_NAMESPACE", "walkingdrum"),
+		},
 	}
 
 	// Validate required configuration
@@ -98,7 +113,7 @@ func Load() (*Config, error) {
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name, cfg.DB.SSLMode,
 	)
-	
+
 	// Add debugging statements
 	fmt.Println("====== Database Configuration ======")
 	fmt.Println("DSN:", cfg.DB.DSN)
@@ -124,7 +139,8 @@ func (c *Config) validate() error {
 	}
 
 	// Verify that the provided database name is valid
-	valid, msg := isValidPostgresIdentifier(c.DB.Name); if !valid {
+	valid, msg := isValidPostgresIdentifier(c.DB.Name)
+	if !valid {
 		return fmt.Errorf("invalid database name '%s': %s", c.DB.Name, msg)
 	}
 
@@ -169,10 +185,10 @@ func isValidPostgresIdentifier(name string) (bool, string) {
 		// 1. Remove the surrounding quotes
 		// 2. Check for any embedded double quotes (they must be escaped as "")
 		// 3. Check if the resulting name is not empty
-		
+
 		// Remove surrounding quotes
 		unquotedName := name[1 : len(name)-1]
-		
+
 		// Check for proper escaping of embedded quotes
 		for i := 0; i < len(unquotedName); i++ {
 			if unquotedName[i] == '"' {
@@ -184,18 +200,18 @@ func isValidPostgresIdentifier(name string) (bool, string) {
 				i++
 			}
 		}
-		
+
 		// Check if the unquoted name is empty
 		if len(unquotedName) == 0 {
 			return false, "quoted identifier cannot be empty"
 		}
-		
+
 		// Check length (after removing quotes and handling escaped quotes)
 		// Note: This is simplified; a proper implementation would count "" as a single character
 		if len(unquotedName) > 31 {
 			return false, "identifier too long (maximum is 31 characters)"
 		}
-		
+
 		return true, ""
 	}
 
@@ -204,7 +220,7 @@ func isValidPostgresIdentifier(name string) (bool, string) {
 	if len(name) == 0 || (!unicode.IsLetter(rune(name[0])) && name[0] != '_') {
 		return false, "identifier must begin with a letter or underscore"
 	}
-	
+
 	// Check subsequent characters
 	for i := 1; i < len(name); i++ {
 		ch := rune(name[i])
@@ -212,12 +228,12 @@ func isValidPostgresIdentifier(name string) (bool, string) {
 			return false, fmt.Sprintf("identifier contains invalid character: %c", ch)
 		}
 	}
-	
+
 	// Check length
 	if len(name) > 31 {
 		return false, "identifier too long (maximum is 31 characters)"
 	}
-	
+
 	// Check if it's a reserved keyword (simplified - would need a comprehensive list)
 	keywords := map[string]bool{
 		"select": true, "from": true, "where": true, "insert": true,
@@ -227,10 +243,10 @@ func isValidPostgresIdentifier(name string) (bool, string) {
 		"database": true, "in": true, "between": true, "like": true,
 		"and": true, "or": true, "not": true, "null": true, "true": true, "false": true,
 	}
-	
+
 	if keywords[strings.ToLower(name)] {
 		return false, fmt.Sprintf("%s is a reserved keyword", name)
 	}
-	
+
 	return true, ""
 }

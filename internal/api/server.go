@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/dukerupert/walking-drum/internal/config"
+	"github.com/dukerupert/walking-drum/internal/events"
 	"github.com/dukerupert/walking-drum/internal/handlers"
 	custommiddleware "github.com/dukerupert/walking-drum/internal/middleware"
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
@@ -18,17 +19,17 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	echo    *echo.Echo
-	config  *config.Config
-	db      *postgres.DB
-	logger  *zerolog.Logger
-	handler *handlers.Handlers
+	echo     *echo.Echo
+	config   *config.Config
+	db       *postgres.DB
+	handler  *handlers.Handlers
 }
 
 // NewServer creates a new server instance with all its dependencies
 func NewServer(
 	cfg *config.Config,
 	db *postgres.DB,
+	eventBus *events.NATSEventBus,
 	logger *zerolog.Logger,
 ) *Server {
 	e := echo.New()
@@ -50,7 +51,7 @@ func NewServer(
 	r := postgres.CreateRepositories(db, logger)
 
 	// Initialize services
-	s := services.CreateServices(cfg, r, logger)
+	s := services.CreateServices(cfg, r, eventBus, logger)
 
 	// Initialize handlers
 	h := handlers.CreateHandlers(cfg, s, logger)

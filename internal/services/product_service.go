@@ -8,6 +8,7 @@ import (
 
 	"github.com/dukerupert/walking-drum/internal/domain/dto"
 	"github.com/dukerupert/walking-drum/internal/domain/models"
+		"github.com/dukerupert/walking-drum/internal/events"
 	"github.com/dukerupert/walking-drum/internal/repositories/interfaces"
 	"github.com/dukerupert/walking-drum/internal/services/stripe"
 	"github.com/google/uuid"
@@ -26,18 +27,20 @@ type ProductService interface {
 
 // productService is the private implementation of ProductService
 type productService struct {
-	productRepo  interfaces.ProductRepository
+	productRepo    interfaces.ProductRepository
 	variantService variantService
-	stripeService stripe.StripeService
-	logger       zerolog.Logger
+	stripeService  stripe.StripeService
+	eventBus       events.EventBus
+	logger         zerolog.Logger
 }
 
 // NewProductService creates a new instance of ProductService
-func NewProductService(repo interfaces.ProductRepository, stripe stripe.StripeService, logger *zerolog.Logger) ProductService {
+func NewProductService(repo interfaces.ProductRepository, stripe stripe.StripeService, eventBus events.EventBus, logger *zerolog.Logger) ProductService {
 	return &productService{
-		productRepo:  repo,
+		productRepo:   repo,
 		stripeService: stripe,
-		logger:       logger.With().Str("component", "product_service").Logger(),
+		eventBus:      eventBus,
+		logger:        logger.With().Str("component", "product_service").Logger(),
 	}
 }
 
@@ -48,11 +51,11 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		Interface("productDTO", productDTO).
 		Msg("Starting product creation")
 
-	// Validate
-    if problems := productDTO.Valid(ctx); len(problems) > 0 {
-        return nil, fmt.Errorf("invalid product data: %v", problems)
-    }
-	
+		// Validate
+	if problems := productDTO.Valid(ctx); len(problems) > 0 {
+		return nil, fmt.Errorf("invalid product data: %v", problems)
+	}
+
 	s.logger.Debug().
 		Str("function", "productService.Create").
 		Msg("Product validation passed")
@@ -72,11 +75,11 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		Images:      []string{productDTO.ImageURL},
 		Active:      productDTO.Active,
 		Metadata: map[string]string{
-			"origin":              productDTO.Origin,
-			"roast_level":         productDTO.RoastLevel,
-			"flavor_notes":        productDTO.FlavorNotes,
-			"weight":              fmt.Sprintf("%d", productDTO.Weight),
-			"allow_subscription":  fmt.Sprintf("%t", productDTO.AllowSubscription),
+			"origin":             productDTO.Origin,
+			"roast_level":        productDTO.RoastLevel,
+			"flavor_notes":       productDTO.FlavorNotes,
+			"weight":             fmt.Sprintf("%d", productDTO.Weight),
+			"allow_subscription": fmt.Sprintf("%t", productDTO.AllowSubscription),
 		},
 	})
 	if err != nil {
@@ -92,8 +95,8 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		Str("stripeProductID", stripeProduct.ID).
 		Msg("Successfully created product in Stripe")
 
-	// 3. Convert DTO to model
-    product := productDTO.ToModel()
+		// 3. Convert DTO to model
+	product := productDTO.ToModel()
 
 	s.logger.Debug().
 		Str("function", "productService.Create").
@@ -132,6 +135,9 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 		return nil, fmt.Errorf("failed to create product in database: %w", err)
 	}
 
+	// Publish event
+	s.eventBus.Publish("products.created", product)
+
 	// 5. Create variants for the product based on options
 	if product.Options != nil && len(product.Options) > 0 {
 		s.logger.Debug().
@@ -147,7 +153,7 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 				Err(err).
 				Str("productID", product.ID.String()).
 				Msg("Failed to generate variants for product")
-				
+
 			// We won't fail the product creation if variant generation fails,
 			// but we'll log the error
 			s.logger.Warn().
@@ -170,68 +176,68 @@ func (s *productService) Create(ctx context.Context, productDTO *dto.ProductCrea
 
 // GetByID retrieves a product by its ID
 func (s *productService) GetByID(ctx context.Context, id uuid.UUID) (*models.Product, error) {
-    s.logger.Debug().
-        Str("function", "productService.GetByID").
-        Str("product_id", id.String()).
-        Msg("Starting product retrieval by ID")
-    
-    // Validate ID
-    if id == uuid.Nil {
-        s.logger.Error().
-            Str("function", "productService.GetByID").
-            Msg("Nil UUID provided")
-        return nil, fmt.Errorf("invalid product ID: nil UUID")
-    }
-    
-    // 1. Call repository to fetch product
-    s.logger.Debug().
-        Str("function", "productService.GetByID").
-        Str("product_id", id.String()).
-        Msg("Calling repository to fetch product")
-        
-    product, err := s.productRepo.GetByID(ctx, id)
-    if err != nil {
-        s.logger.Error().
-            Str("function", "productService.GetByID").
-            Err(err).
-            Str("product_id", id.String()).
-            Msg("Failed to retrieve product from repository")
-        return nil, fmt.Errorf("failed to retrieve product: %w", err)
-    }
-    
-    // Check if product was found
-    if product == nil {
-        s.logger.Error().
-            Str("function", "productService.GetByID").
-            Str("product_id", id.String()).
-            Msg("Product not found")
-        return nil, fmt.Errorf("product with ID %s not found", id)
-    }
-    
-    // Additional business logic can be added here
-    // For example, check if the product is active for non-admin users
-    // This would be an appropriate place to add that logic
-    
-    // Check stock level and log warning if low
-    if product.StockLevel < 10 {
-        s.logger.Warn().
-            Str("function", "productService.GetByID").
-            Str("product_id", id.String()).
-            Str("product_name", product.Name).
-            Int("stock_level", product.StockLevel).
-            Msg("Product has low stock level")
-    }
-    
-    s.logger.Info().
-        Str("function", "productService.GetByID").
-        Str("product_id", id.String()).
-        Str("product_name", product.Name).
-        Str("stripe_id", product.StripeID).
-        Bool("active", product.Active).
-        Int("stock_level", product.StockLevel).
-        Msg("Product successfully retrieved")
-        
-    return product, nil
+	s.logger.Debug().
+		Str("function", "productService.GetByID").
+		Str("product_id", id.String()).
+		Msg("Starting product retrieval by ID")
+
+	// Validate ID
+	if id == uuid.Nil {
+		s.logger.Error().
+			Str("function", "productService.GetByID").
+			Msg("Nil UUID provided")
+		return nil, fmt.Errorf("invalid product ID: nil UUID")
+	}
+
+	// 1. Call repository to fetch product
+	s.logger.Debug().
+		Str("function", "productService.GetByID").
+		Str("product_id", id.String()).
+		Msg("Calling repository to fetch product")
+
+	product, err := s.productRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "productService.GetByID").
+			Err(err).
+			Str("product_id", id.String()).
+			Msg("Failed to retrieve product from repository")
+		return nil, fmt.Errorf("failed to retrieve product: %w", err)
+	}
+
+	// Check if product was found
+	if product == nil {
+		s.logger.Error().
+			Str("function", "productService.GetByID").
+			Str("product_id", id.String()).
+			Msg("Product not found")
+		return nil, fmt.Errorf("product with ID %s not found", id)
+	}
+
+	// Additional business logic can be added here
+	// For example, check if the product is active for non-admin users
+	// This would be an appropriate place to add that logic
+
+	// Check stock level and log warning if low
+	if product.StockLevel < 10 {
+		s.logger.Warn().
+			Str("function", "productService.GetByID").
+			Str("product_id", id.String()).
+			Str("product_name", product.Name).
+			Int("stock_level", product.StockLevel).
+			Msg("Product has low stock level")
+	}
+
+	s.logger.Info().
+		Str("function", "productService.GetByID").
+		Str("product_id", id.String()).
+		Str("product_name", product.Name).
+		Str("stripe_id", product.StripeID).
+		Bool("active", product.Active).
+		Int("stock_level", product.StockLevel).
+		Msg("Product successfully retrieved")
+
+	return product, nil
 }
 
 // List retrieves all products with optional filtering
@@ -324,9 +330,9 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 	}
 
 	// Validate
-    if problems := productDTO.Valid(ctx); len(problems) > 0 {
-        return nil, fmt.Errorf("invalid product data: %v", problems)
-    }
+	if problems := productDTO.Valid(ctx); len(problems) > 0 {
+		return nil, fmt.Errorf("invalid product data: %v", problems)
+	}
 
 	// 1. Get existing product
 	existingProduct, err := s.productRepo.GetByID(ctx, id)
@@ -359,7 +365,7 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 
 	// 2. Update fields from DTO
 	// Only update fields that are provided in the DTO
-    productDTO.ApplyToModel(existingProduct)
+	productDTO.ApplyToModel(existingProduct)
 
 	// 3. Update in Stripe if product has a Stripe ID
 	if existingProduct.StripeID != "" {
@@ -403,7 +409,7 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 	// 5. Check if variants need to be updated
 	if productDTO.Options != nil {
 		optionsChanged := false
-		
+
 		// Check if options have changed
 		if len(oldOptions) != len(existingProduct.Options) {
 			optionsChanged = true
@@ -415,13 +421,13 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 					optionsChanged = true
 					break
 				}
-				
+
 				// Check if values have changed
 				if len(oldValues) != len(newValues) {
 					optionsChanged = true
 					break
 				}
-				
+
 				// Check each value
 				for i, oldValue := range oldValues {
 					if i >= len(newValues) || oldValue != newValues[i] {
@@ -429,13 +435,13 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 						break
 					}
 				}
-				
+
 				if optionsChanged {
 					break
 				}
 			}
 		}
-		
+
 		if optionsChanged {
 			s.logger.Debug().
 				Str("service", "ProductService.Update").
@@ -444,7 +450,7 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 				Interface("old_options", oldOptions).
 				Interface("new_options", existingProduct.Options).
 				Msg("Product options have changed, updating variants")
-				
+
 			err = s.variantService.UpdateVariantsForProduct(ctx, existingProduct, oldOptions)
 			if err != nil {
 				s.logger.Error().
@@ -453,7 +459,7 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 					Str("request_id", requestID).
 					Str("product_id", id.String()).
 					Msg("Error updating variants for product")
-					
+
 				// We won't fail the product update if variant update fails,
 				// but we'll log the error
 				s.logger.Warn().
@@ -476,108 +482,108 @@ func (s *productService) Update(ctx context.Context, id uuid.UUID, productDTO *d
 
 // Delete removes a product from the system
 func (s *productService) Delete(ctx context.Context, id uuid.UUID) error {
-    s.logger.Debug().
-        Str("function", "productService.Delete").
-        Str("product_id", id.String()).
-        Msg("Starting product deletion")
+	s.logger.Debug().
+		Str("function", "productService.Delete").
+		Str("product_id", id.String()).
+		Msg("Starting product deletion")
 
-    // 1. Get existing product from repository
-    s.logger.Debug().
-        Str("function", "productService.Delete").
-        Str("product_id", id.String()).
-        Msg("Retrieving product from repository")
-        
-    product, err := s.productRepo.GetByID(ctx, id)
-    if err != nil {
-        s.logger.Error().
-            Str("function", "productService.Delete").
-            Err(err).
-            Str("product_id", id.String()).
-            Msg("Failed to retrieve product")
-        return fmt.Errorf("failed to retrieve product for deletion: %w", err)
-    }
-    
-    if product == nil {
-        s.logger.Error().
-            Str("function", "productService.Delete").
-            Str("product_id", id.String()).
-            Msg("Product not found")
-        return fmt.Errorf("product with ID %s not found", id)
-    }
-    
-    s.logger.Debug().
-        Str("function", "productService.Delete").
-        Str("product_id", id.String()).
-        Str("product_name", product.Name).
-        Str("stripe_id", product.StripeID).
-        Msg("Product found, proceeding with deletion")
+	// 1. Get existing product from repository
+	s.logger.Debug().
+		Str("function", "productService.Delete").
+		Str("product_id", id.String()).
+		Msg("Retrieving product from repository")
 
-    // 2. Archive in Stripe first if the product has a Stripe ID
-    if product.StripeID != "" {
-        s.logger.Debug().
-            Str("function", "productService.Delete").
-            Str("product_id", id.String()).
-            Str("stripe_id", product.StripeID).
-            Msg("Archiving product in Stripe")
-            
-        err = s.stripeService.ArchiveProduct(ctx, product.StripeID)
-        if err != nil {
-            s.logger.Error().
-                Str("function", "productService.Delete").
-                Err(err).
-                Str("product_id", id.String()).
-                Str("stripe_id", product.StripeID).
-                Msg("Failed to archive product in Stripe")
-            return fmt.Errorf("failed to archive product in Stripe: %w", err)
-        }
-        
-        s.logger.Debug().
-            Str("function", "productService.Delete").
-            Str("product_id", id.String()).
-            Str("stripe_id", product.StripeID).
-            Msg("Successfully archived product in Stripe")
-    } else {
-        s.logger.Warn().
-            Str("function", "productService.Delete").
-            Str("product_id", id.String()).
-            Msg("Product has no Stripe ID, skipping Stripe archiving")
-    }
+	product, err := s.productRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "productService.Delete").
+			Err(err).
+			Str("product_id", id.String()).
+			Msg("Failed to retrieve product")
+		return fmt.Errorf("failed to retrieve product for deletion: %w", err)
+	}
 
-    // 3. Delete from database
-    s.logger.Debug().
-        Str("function", "productService.Delete").
-        Str("product_id", id.String()).
-        Msg("Deleting product from database")
-        
-    err = s.productRepo.Delete(ctx, id)
-    if err != nil {
-        s.logger.Error().
-            Str("function", "productService.Delete").
-            Err(err).
-            Str("product_id", id.String()).
-            Msg("Failed to delete product from database")
-            
-        // If database deletion fails but we already archived in Stripe,
-        // we should log this inconsistency
-        if product.StripeID != "" {
-            s.logger.Warn().
-                Str("function", "productService.Delete").
-                Str("product_id", id.String()).
-                Str("stripe_id", product.StripeID).
-                Msg("Inconsistent state: Product archived in Stripe but not deleted from database")
-        }
-        
-        return fmt.Errorf("failed to delete product from database: %w", err)
-    }
-    
-    s.logger.Info().
-        Str("function", "productService.Delete").
-        Str("product_id", id.String()).
-        Str("product_name", product.Name).
-        Str("stripe_id", product.StripeID).
-        Msg("Product successfully deleted")
-        
-    return nil
+	if product == nil {
+		s.logger.Error().
+			Str("function", "productService.Delete").
+			Str("product_id", id.String()).
+			Msg("Product not found")
+		return fmt.Errorf("product with ID %s not found", id)
+	}
+
+	s.logger.Debug().
+		Str("function", "productService.Delete").
+		Str("product_id", id.String()).
+		Str("product_name", product.Name).
+		Str("stripe_id", product.StripeID).
+		Msg("Product found, proceeding with deletion")
+
+	// 2. Archive in Stripe first if the product has a Stripe ID
+	if product.StripeID != "" {
+		s.logger.Debug().
+			Str("function", "productService.Delete").
+			Str("product_id", id.String()).
+			Str("stripe_id", product.StripeID).
+			Msg("Archiving product in Stripe")
+
+		err = s.stripeService.ArchiveProduct(ctx, product.StripeID)
+		if err != nil {
+			s.logger.Error().
+				Str("function", "productService.Delete").
+				Err(err).
+				Str("product_id", id.String()).
+				Str("stripe_id", product.StripeID).
+				Msg("Failed to archive product in Stripe")
+			return fmt.Errorf("failed to archive product in Stripe: %w", err)
+		}
+
+		s.logger.Debug().
+			Str("function", "productService.Delete").
+			Str("product_id", id.String()).
+			Str("stripe_id", product.StripeID).
+			Msg("Successfully archived product in Stripe")
+	} else {
+		s.logger.Warn().
+			Str("function", "productService.Delete").
+			Str("product_id", id.String()).
+			Msg("Product has no Stripe ID, skipping Stripe archiving")
+	}
+
+	// 3. Delete from database
+	s.logger.Debug().
+		Str("function", "productService.Delete").
+		Str("product_id", id.String()).
+		Msg("Deleting product from database")
+
+	err = s.productRepo.Delete(ctx, id)
+	if err != nil {
+		s.logger.Error().
+			Str("function", "productService.Delete").
+			Err(err).
+			Str("product_id", id.String()).
+			Msg("Failed to delete product from database")
+
+		// If database deletion fails but we already archived in Stripe,
+		// we should log this inconsistency
+		if product.StripeID != "" {
+			s.logger.Warn().
+				Str("function", "productService.Delete").
+				Str("product_id", id.String()).
+				Str("stripe_id", product.StripeID).
+				Msg("Inconsistent state: Product archived in Stripe but not deleted from database")
+		}
+
+		return fmt.Errorf("failed to delete product from database: %w", err)
+	}
+
+	s.logger.Info().
+		Str("function", "productService.Delete").
+		Str("product_id", id.String()).
+		Str("product_name", product.Name).
+		Str("stripe_id", product.StripeID).
+		Msg("Product successfully deleted")
+
+	return nil
 }
 
 // UpdateStockLevel updates the stock level of a product (simplified version)

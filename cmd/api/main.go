@@ -20,6 +20,7 @@ import (
 
 	"github.com/dukerupert/walking-drum/internal/api"
 	"github.com/dukerupert/walking-drum/internal/config"
+	"github.com/dukerupert/walking-drum/internal/events"
 	"github.com/dukerupert/walking-drum/internal/repositories/postgres"
 )
 
@@ -117,13 +118,22 @@ func run(ctx context.Context, args []string, w io.Writer) error {
 
 	// Run migrations
 	if err := runMigrations(cfg, &logger); err != nil {
-        logger.Fatal().Err(err).Msg("Fatal migration error")
-    }
+		logger.Fatal().Err(err).Msg("Fatal migration error")
+	}
+
+	// Initialize event bus
+	logger.Info().Msg("Initializing event bus")
+	eventBus, err := events.NewNATSEventBus(cfg.MessageBus.URL, &logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to initialize event bus")
+	}
+	defer eventBus.Close()
 
 	// Initialize server with handlers
 	server := api.NewServer(
 		cfg,
 		db,
+		eventBus,
 		&logger,
 	)
 
