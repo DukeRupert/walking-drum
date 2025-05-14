@@ -6,6 +6,24 @@ services:
     volumes:
       - ..:/workspaces:cached
     command: sleep infinity
+    environment:
+      - APP_ENV=development
+      - APP_PORT=8080
+      - APP_DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=coffee_subscriptions
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_SSL_MODE=disable
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_EXCHANGE=coffee_subscription
+      - EMAIL_PROVIDER=sendgrid
+      - EMAIL_API_KEY=${EMAIL_API_KEY}
+      - EMAIL_FROM=noreply@example.com
+      - EMAIL_FROM_NAME=Coffee Subscription Service
 
   db:
     image: postgres:16
@@ -18,6 +36,27 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  rabbitmq:
+    image: rabbitmq:3.10-management-alpine
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI port
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  rabbitmq-ui:
+    image: heidiks/rabbitmq-ui
+    ports:
+      - "15673:15672"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+
 # Add this volumes section
 volumes:
   postgres_data:
+  rabbitmq_data:
