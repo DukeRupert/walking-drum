@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/joho/godotenv"
@@ -18,6 +19,24 @@ type Config struct {
 	DB     DBConfig
 	Stripe StripeConfig
 	JWT    JWTConfig
+	RabbitMQ RabbitMQConfig // Add RabbitMQ configuration
+	Email    EmailConfig    // Also add an email config
+}
+
+// RabbitMQConfig holds RabbitMQ configuration
+type RabbitMQConfig struct {
+	URL               string
+	ReconnectInterval time.Duration
+	ExchangeName      string
+}
+
+// EmailConfig holds email configuration
+type EmailConfig struct {
+	Provider    string // "sendgrid", "ses", etc.
+	APIKey      string
+	FromEmail   string
+	FromName    string
+	TemplateDir string
 }
 
 // AppConfig holds application-specific configuration
@@ -79,6 +98,18 @@ func Load() (*Config, error) {
 		JWT: JWTConfig{
 			Secret:     getEnv("JWT_SECRET", "your_jwt_secret_key"),
 			Expiration: getEnv("JWT_EXPIRATION", "24h"),
+		},
+		RabbitMQ: RabbitMQConfig{
+			URL:               getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+			ReconnectInterval: getEnvAsDuration("RABBITMQ_RECONNECT_INTERVAL", 5*time.Second),
+			ExchangeName:      getEnv("RABBITMQ_EXCHANGE", "coffee_subscription"),
+		},
+		Email: EmailConfig{
+			Provider:    getEnv("EMAIL_PROVIDER", "sendgrid"),
+			APIKey:      getEnv("EMAIL_API_KEY", ""),
+			FromEmail:   getEnv("EMAIL_FROM", "noreply@example.com"),
+			FromName:    getEnv("EMAIL_FROM_NAME", "Coffee Subscription"),
+			TemplateDir: getEnv("EMAIL_TEMPLATE_DIR", "./templates/email"),
 		},
 	}
 
@@ -150,6 +181,14 @@ func getEnvAsInt(key string, defaultValue int) int {
 func getEnvAsBool(key string, defaultValue bool) bool {
 	valueStr := getEnv(key, "")
 	if value, err := strconv.ParseBool(valueStr); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
+	valueStr := getEnv(key, "")
+	if value, err := time.ParseDuration(valueStr); err == nil {
 		return value
 	}
 	return defaultValue
