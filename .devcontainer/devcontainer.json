@@ -19,20 +19,7 @@
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	
 	"features": {
-		"ghcr.io/devcontainers/features/node:1": {
-			"nodeGypDependencies": true,
-			"installYarnUsingApt": true,
-			"version": "lts",
-			"pnpmVersion": "latest",
-			"nvmVersion": "latest"
-		},
 		"ghcr.io/jungaretti/features/make:1": {},
-		"ghcr.io/r3dpoint/devcontainer-features/tailwindcss-standalone-cli:1": {
-			"version": "latest"
-		},
-		"ghcr.io/dusansimic/devcontainer-features/templ:0": {
-			"version": "latest"
-		},
 		"ghcr.io/devcontainers/features/go:1": {
 			"version": "1.23"
 		},
@@ -53,7 +40,7 @@
 	// "features": {},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	"forwardPorts": [8081, 8080, 5432, 5173],
+	"forwardPorts": [8222, 8080, 5432, 4222],
 
 	// Uncomment the next line if you want start specific services in your Docker Compose config.
 	"runServices": ["db"]
