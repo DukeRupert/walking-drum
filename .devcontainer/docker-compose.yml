@@ -17,6 +17,13 @@ services:
       - POSTGRES_DB=coffee_subscriptions
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  
+  nats:
+    image: nats:2.9.15-alpine
+    ports:
+      - "4222:4222"  # Client port
+      - "8222:8222"  # HTTP monitoring port
+    command: ["-js", "-m", "8222"]  # Enable JetStream and monitoring
 
 # Add this volumes section
 volumes:
