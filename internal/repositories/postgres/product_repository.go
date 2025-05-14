@@ -41,20 +41,27 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 	product.UpdatedAt = now
 
 	// Convert Options map to JSON string for storage
-	optionsJSON, err := json.Marshal(product.Options)
-	if err != nil {
-		return fmt.Errorf("failed to marshal options: %w", err)
+	var optionsJSON []byte
+	var err error
+	if product.Options != nil {
+		optionsJSON, err = json.Marshal(product.Options)
+		if err != nil {
+			r.logger.Error().Err(err).Str("product_id", product.ID.String()).Msg("Failed to marshal options")
+			return fmt.Errorf("failed to marshal options: %w", err)
+		}
+	} else {
+		optionsJSON = []byte("{}")
 	}
 
 	query := `
 		INSERT INTO products (
 			id, name, description, image_url, active, stock_level,
-			weight, origin, roast_level, flavor_notes, options, allow_subscription, stripe_id,
+			origin, roast_level, flavor_notes, options, allow_subscription, stripe_id,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11, $12, $13,
-			$14, $15
+			$7, $8, $9, $10, $11, $12,
+			$13, $14
 		)
 	`
 
@@ -68,7 +75,6 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 		product.ImageURL,
 		product.Active,
 		product.StockLevel,
-		product.Weight,
 		product.Origin,
 		product.RoastLevel,
 		product.FlavorNotes,
@@ -80,9 +86,11 @@ func (r *ProductRepository) Create(ctx context.Context, product *models.Product)
 	)
 
 	if err != nil {
+		r.logger.Error().Err(err).Str("product_id", product.ID.String()).Msg("Failed to create product in database")
 		return fmt.Errorf("failed to create product: %w", err)
 	}
 
+	r.logger.Debug().Str("product_id", product.ID.String()).Msg("Product created successfully in database")
 	return nil
 }
 

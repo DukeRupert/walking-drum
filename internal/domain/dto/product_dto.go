@@ -58,10 +58,6 @@ func (p *ProductCreateDTO) Valid(ctx context.Context) map[string]string {
 		problems["description"] = "description is required"
 	}
 
-	if p.Weight <= 0 {
-		problems["weight"] = "weight must be greater than 0"
-	}
-
 	if p.StockLevel < 0 {
 		problems["stock_level"] = "stock level cannot be negative"
 	}

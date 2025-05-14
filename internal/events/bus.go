@@ -104,6 +104,49 @@ func (n *NATSEventBus) Publish(topic string, payload interface{}) error {
 	return n.conn.Publish(topic, data)
 }
 
+// PublishPersistent publishes an event that will be stored in JetStream
+func (n *NATSEventBus) PublishPersistent(topic string, payload interface{}) error {
+    // Create an event with metadata
+    event := Event{
+        ID:        uuid.New().String(),
+        Topic:     topic,
+        Timestamp: time.Now(),
+        Payload:   payload,
+    }
+    
+    // Marshal the event to JSON
+    data, err := json.Marshal(event)
+    if err != nil {
+        return fmt.Errorf("failed to marshal event: %w", err)
+    }
+    
+    n.logger.Debug().
+        Str("topic", topic).
+        Str("event_id", event.ID).
+        Int("data_size", len(data)).
+        Msg("Publishing persistent event")
+    
+    // Create stream if needed
+    streamName := "EVENTS"
+    stream, err := n.jetStream.StreamInfo(streamName)
+    if err != nil || stream == nil {
+        n.logger.Info().Msg("Creating events stream")
+        _, err = n.jetStream.AddStream(&nats.StreamConfig{
+            Name:     streamName,
+            Subjects: []string{"events.>"},
+            Storage:  nats.FileStorage,
+            MaxAge:   time.Hour * 24 * 30, // 30 days retention
+        })
+        if err != nil {
+            return fmt.Errorf("failed to create stream: %w", err)
+        }
+    }
+    
+    // Publish the event with acknowledgment
+    _, err = n.jetStream.Publish("events."+topic, data)
+    return err
+}
+
 // Subscribe registers a handler for events on the specified topic
 func (n *NATSEventBus) Subscribe(topic string, handler func([]byte)) (*nats.Subscription, error) {
 	n.logger.Debug().

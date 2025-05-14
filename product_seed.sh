@@ -2,7 +2,7 @@
 
 # Script to seed coffee product data
 # Replace the API URL with your actual API endpoint
-API_URL="https://bug-free-bassoon-qprxx5rv5x5c4xww-8080.app.github.dev/api/v1/products"
+API_URL="https://refactored-giggle-4w4rrp4q5r925j7w-8080.app.github.dev/api/v1/products"
 
 # Helper function to make API calls
 create_product() {
@@ -27,9 +27,10 @@ cloud9=$(cat <<EOF
     "weight": ["12oz", "3lb", "5lb"],
     "grind": ["Whole Bean", "Drip Ground"]
   },
+  "weight": 10,
   "allow_subscription": true,
   "origin": "Blend - Three Coffee Regions",
-  "roast_level": "Full City",
+  "roast_level": "medium",
   "flavor_notes": "Berry top notes, sweet orange-citrus acidity, smooth dark chocolate, brown sugar, crisp clean finish",
   "created_at": "2025-05-12T00:00:00Z",
   "updated_at": "2025-05-12T00:00:00Z"
