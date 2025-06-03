@@ -38,6 +38,12 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    serverActions: {
+      allowedOrigins: ['localhost:8000','localhost:9000','potential-robot-4w4rrp4qpw5hq7g5.app.github.dev',],
+      allowedForwardedHosts: ['localhost:8000','localhost:9000','potential-robot-4w4rrp4qpw5hq7g5.app.github.dev'],
+    },
+  },
 }
 
 module.exports = nextConfig
