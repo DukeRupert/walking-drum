@@ -3,3 +3,28 @@
 //   sqlc v1.31.1
 
 package sqlc
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Account struct {
+	ID            pgtype.UUID
+	Email         string
+	EmailVerified bool
+	DisplayName   string
+	PasswordHash  string
+	TotpSecret    *string
+	TotpEnabled   bool
+	Status        string
+	CreatedAt     pgtype.Timestamptz
+	LastLoginAt   pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+}
+
+type AccountFlag struct {
+	AccountID pgtype.UUID
+	FlagType  string
+	FlagValue []byte
+	CreatedAt pgtype.Timestamptz
+}
