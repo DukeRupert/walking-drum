@@ -1,9 +1,62 @@
 package envfile
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	content := "FOO=from_file\nBAR=also_from_file\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	// Make sure these aren't set from the outside.
+	t.Setenv("FOO", "")
+	os.Unsetenv("FOO")
+	t.Setenv("BAR", "")
+	os.Unsetenv("BAR")
+
+	if err := Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := os.Getenv("FOO"); got != "from_file" {
+		t.Errorf("FOO = %q, want %q", got, "from_file")
+	}
+	if got := os.Getenv("BAR"); got != "also_from_file" {
+		t.Errorf("BAR = %q, want %q", got, "also_from_file")
+	}
+}
+
+func TestLoad_SkipsExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	if err := os.WriteFile(path, []byte("FOO=from_file\n"), 0644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	t.Setenv("FOO", "from_shell")
+
+	if err := Load(path); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if got := os.Getenv("FOO"); got != "from_shell" {
+		t.Errorf("FOO = %q, want %q (shell value should win)", got, "from_shell")
+	}
+}
+
+func TestLoad_MissingFile(t *testing.T) {
+	err := Load(filepath.Join(t.TempDir(), "does-not-exist"))
+	if err == nil {
+		t.Fatal("expected error for missing file, got nil")
+	}
+}
 
 func TestParse(t *testing.T) {
 	input := `# database config

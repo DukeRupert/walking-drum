@@ -7,8 +7,39 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
+
+// Load reads the .env file at path and sets each KEY=VALUE pair as an
+// environment variable. Existing environment variables are not overwritten,
+// so values set by the shell or platform take precedence over the file.
+//
+// Returns an error if the file cannot be opened or contains malformed lines.
+func Load(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	pairs, err := Parse(f)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	for key, value := range pairs {
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("setenv %s: %w", path, err)
+		}
+	}
+
+	return nil
+}
 
 // Parse reads a .env-formatted stream and returns the parsed key/value pairs.
 // Blank lines and comments are skipped. Malformed lines return an error
