@@ -11,7 +11,11 @@ CREATE TABLE moderation_actions (
   reason          TEXT NOT NULL,
   details         JSONB NOT NULL DEFAULT '{}'::jsonb,
   applied_by      UUID REFERENCES accounts(id),
-  applied_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- clock_timestamp() (not NOW()) so two actions appended in the same
+  -- transaction still get distinct timestamps. Ordering matters here
+  -- because 'unban' is recognized as overturning a prior ban via
+  -- applied_at > the ban's applied_at.
+  applied_at      TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   expires_at      TIMESTAMPTZ
 );
 
