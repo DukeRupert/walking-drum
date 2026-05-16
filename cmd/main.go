@@ -3,17 +3,17 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"log"
 	"os"
+	"time"
 
+	"github.com/dukerupert/walking-drum/internal/db"
 	"github.com/dukerupert/walking-drum/internal/envfile"
-
-	"github.com/jackc/pgx/v5"
 )
 
 func main() {
+	// environment and db setup
 	if err := envfile.Load(".env"); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		log.Fatalf("load .env: %v", err)
 	}
@@ -22,21 +22,16 @@ func main() {
 	if dbURL == "" {
 		log.Fatalf("DATABASE_URL is not set")
 	}
-	
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close(context.Background())
 
-	var name string
-	var weight int64
-	err = conn.QueryRow(context.Background(), "select name, weight from widgets where id=$1", 42).Scan(&name, &weight)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
-		os.Exit(1)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	fmt.Println(name, weight)
+	pool, err := db.Connect(ctx, dbURL)
+	if err != nil {
+		log.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	// ...rest of app
+
 }

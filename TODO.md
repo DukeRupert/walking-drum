@@ -4,7 +4,7 @@ Bones of the project. Get this working before touching any game code.
 
 - [x] Go module init — module path, `go.mod`, basic directory structure (`cmd/`, `internal/`, `migrations/`)
 - [x] PostgreSQL running locally via Docker Compose — single Postgres service, named volume for persistence, exposed port, connection string in environment
-- [ ] `pgx` and `pgxpool` wired in — a `db.Connect()` function returning `*pgxpool.Pool`, reads connection string from env, sensible pool config
+- [x] `pgx` and `pgxpool` wired in — a `db.Connect()` function returning `*pgxpool.Pool`, reads connection string from env, sensible pool config
 - [ ] `goose` installed and configured — `migrations/` directory recognized, `goose status` works, a no-op initial migration verifies up/down cycle
 - [ ] `sqlc` installed and configured — `sqlc.yaml` pointing at `migrations/` for schema and `queries/` directory for query files, generated code lands in `internal/db/` or similar, empty initial generation works
 - [ ] Smoke test — a `main.go` that connects to the DB, runs migrations, prints "ok," exits
