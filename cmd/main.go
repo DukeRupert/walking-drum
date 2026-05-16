@@ -2,14 +2,27 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"log"
 	"os"
+
+	"github.com/dukerupert/walking-drum/internal/envfile"
 
 	"github.com/jackc/pgx/v5"
 )
 
 func main() {
-	// urlExample := "postgres://username:password@localhost:5432/database_name"
+	if err := envfile.Load(".env"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Fatalf("load .env: %v", err)
+	}
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatalf("DATABASE_URL is not set")
+	}
+	
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
