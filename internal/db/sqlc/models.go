@@ -28,3 +28,24 @@ type AccountFlag struct {
 	FlagValue []byte
 	CreatedAt pgtype.Timestamptz
 }
+
+type Season struct {
+	ID        int32
+	Name      *string
+	Status    string
+	WorldSeed int64
+	Modifiers []byte
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	WipedAt   pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+type SeasonParticipation struct {
+	AccountID      pgtype.UUID
+	SeasonID       int32
+	CharactersMade int32
+	Deaths         int32
+	DeepestRegion  *int32
+	FinalSummary   []byte
+}
