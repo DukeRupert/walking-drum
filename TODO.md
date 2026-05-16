@@ -47,7 +47,7 @@ Per §6.6 of the design doc.
 - [x] Transactional entity-creation helper in Go — given a season, type, optional position, and optional initial components, creates the entity row + position row + component rows in a single transaction
 - [x] Sweep job stub — hard-deletes entities where `destroyed_at_tick < (current_tick - retention_window)`, wired but gated by config flag, disabled by default until Layer 6 is real
 
-**Done when:** a test creates a fictional entity with a position and a marker component, looks it up, updates the component, soft-deletes the entity, and confirms the row is still there but the position row is gone.
+**Done when:** a test creates a fictional entity with a position and a marker component, looks it up, updates the component, soft-deletes the entity, and confirms the row is still there but the position row is gone. ✅
 
 ---
 
