@@ -18,7 +18,7 @@ Bones of the project. Get this working before touching any game code.
 Per §5.8 of the design doc.
 
 - [x] Migration: `citext` extension (trivial, but proves migrations work end-to-end)
-- [ ] Migration: `accounts` + `account_flags` tables, including the partial index on `status`
+- [x] Migration: `accounts` + `account_flags` tables, including the partial index on `status`
 - [ ] `sqlc` queries for accounts — create account, look up by email, look up by id, update status, soft-delete
 - [ ] Migration: `seasons` + `season_participation` tables, including the unique partial index for "one active season at a time" and a seed migration creating season 1 with placeholder dates and seed
 - [ ] `sqlc` queries for seasons — get active season, get season by id, advance season status (`upcoming` → `active` → `ended`)
