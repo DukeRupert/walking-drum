@@ -31,6 +31,30 @@ type AccountFlag struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type Component struct {
+	EntityID      pgtype.UUID
+	ComponentType string
+	State         []byte
+	CreatedAtTick int64
+	UpdatedAtTick int64
+}
+
+type Entity struct {
+	ID              pgtype.UUID
+	SeasonID        int32
+	EntityType      string
+	CreatedAtTick   int64
+	DestroyedAtTick *int64
+}
+
+type EntityPosition struct {
+	EntityID      pgtype.UUID
+	RegionID      int32
+	X             int32
+	Y             int32
+	UpdatedAtTick int64
+}
+
 type ModerationAction struct {
 	ID         pgtype.UUID
 	AccountID  pgtype.UUID
