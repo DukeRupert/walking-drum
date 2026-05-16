@@ -3,7 +3,7 @@
 **Working title:** Walking Drum
 **Author:** Logan Williams
 **Status:** Living document — updated as decisions are made
-**Last updated:** May 15, 2026
+**Last updated:** May 16, 2026
 
 ---
 
@@ -85,9 +85,7 @@ Conceptual model the runtime and persistence layer both follow:
 
 **Energy regen is per-entity** — a property of the `Actor` component (Layer 3). A potion of haste increases regen rate; carrying a heavy load decreases it.
 
-**Game-time is measured in ticks**, monotonic per season, reset to 0 on wipe. A global `current_tick` counter lives in the server's central hub, persisted periodically. Wall-clock timestamps still exist for ops/audit purposes, but game-tick is the source of truth for "when did this happen in the world."
-
-**Key insight:** energy is a game-currency, not a wall-clock measure. It doesn't matter whether 100 energy regen happens over 1 second or 2.5 seconds of wall time — what matters is that move costs 40 of it and attack costs 200. The tick rate is just how finely the server slices the regen.
+**Game-time is measured in ticks**, monotonic per season, reset to 0 on wipe. Wall-clock time still exists for audit logs and operational forensics, but game-tick is the source of truth for "when did this happen in the world." A global `current_tick` counter lives in the server's central hub, persisted periodically.
 
 ---
 
@@ -445,14 +443,14 @@ Key decisions:
 - **`entity_type` is TEXT with a CHECK constraint**, not a lookup table. Closed set defined by code, not content. Mirrors the `accounts.status` pattern.
 - **`entity_type` is immutable.** Character-to-corpse is "destroy character entity, create corpse entity" — two IDs, clean lifecycle. No DB trigger enforces this; application code is the source of truth.
 - **Six types in v1**: `character`, `npc`, `item`, `corpse`, `projectile`, `world_object`. Coarse on purpose — finer distinctions (fire patch vs. trap vs. door) live in components and templates.
-- **`projectile` is a first-class type.** Arrows in flight, magic missiles, thrown bombs, explosives with fuses — all entities with Position + Actor + a `Trajectory` component. The scheduler ticks them the same way it ticks players and NPCs. This unlocks interceptable, dodgeable, lootable-on-miss projectiles without special-case loops.
-- **Soft delete via `destroyed_at_tick`.** A destroyed entity is inert but still queryable for audit-log replay. Hard-delete sweep runs periodically (retention window ~24–48 game-hours); full truncation at season wipe.
+- **`projectile` is a first-class type.** Arrows in flight, magic missiles, thrown bombs, explosives with fuses — all entities with Position + Actor + a `Trajectory` component. The scheduler ticks them the same way it ticks players and NPCs.
+- **Soft delete via `destroyed_at_tick`.** Hard-delete sweep runs periodically; full truncation at season wipe.
 - **No `destroyed_reason` column.** Reasons live in the audit log (Layer 6).
 - **`season_id` FK** ensures entities are scoped to a season for cheap wipe.
 
 ### 6.3 `entity_positions`
 
-Sparse table for entities that have a position in the world. Most entities have one; some abstract or container-held entities don't.
+Sparse table for entities that have a position in the world. Most entities have one; some (abstract / container-held) don't.
 
 ```sql
 CREATE TABLE entity_positions (
@@ -472,7 +470,7 @@ CREATE INDEX entity_positions_region_idx
 
 Key decisions:
 
-- **Position is its own table, not columns on `entities` or a component in JSONB.** Hot-path spatial queries deserve a real indexed table. Not nullable-columns-on-entities because most entities have a position but the abstract ones don't, and nullable columns lie about that. Not a JSONB component because position has no schema variation and is queried spatially, not structurally.
+- **Position is its own table, not columns on `entities` or a component in JSONB.** Hot-path spatial queries deserve a real indexed table. Not nullable-columns-on-entities because most entities have a position but the abstract ones don't, and nullable columns lie about that.
 - **Position row deleted when entity is destroyed.** Position is liveness state. A destroyed entity isn't in the world. Cascade delete on `ON DELETE CASCADE`; for soft-deletes, application code deletes the position row when setting `destroyed_at_tick`.
 - **`region_id` FK deferred to Layer 4.** Layer 2's migration creates the column without the FK; Layer 4 adds `ALTER TABLE ... ADD FOREIGN KEY`. Keeps layer boundaries honest.
 - **Composite index `(region_id, x, y)`** for spatial queries — "what's at (x,y) in region R" and "what's in this region."
@@ -516,23 +514,15 @@ Key decisions:
 - **Promotion of specific component types to dedicated tables** — only when a real query, indexing, or integrity need arises.
 - **Spatial indexing beyond btree on `(region_id, x, y)`** — GiST/BRIN deferred until measured need.
 - **Position update batching** — currently every move is one UPDATE. If we measure hot-spot contention, batch at the region-goroutine level. Defer.
-- **Server-side `current_tick` persistence cadence** — small concern, decide when wiring up the scheduler.
 
 ### 6.6 Layer 2 Commit Sequence
 
-1. **Migration: create `entities` table** with CHECK constraint and indexes. No FKs to it from other tables yet.
-2. **Migration: create `entity_positions` table** with indexes. `region_id` as plain `INT NOT NULL`, no FK (Layer 4 adds it).
-3. **Migration: create `components` table** with indexes.
-4. **Go types**: `Entity`, `Position`, generic `Component` interface, and the first concrete component struct as a smoke test (something cheap like a `Hidden` marker — real ones like `OnFire` arrive in Layer 3 when systems exist to use them).
-5. **`sqlc` queries for basic operations**:
-   - Create entity (with optional initial position and components, in a transaction)
-   - Look up entity by ID (with components, with position)
-   - Soft-delete entity (set `destroyed_at_tick`, delete position row)
-   - Query entities by `(season_id, entity_type)` filter
-   - Query entities by `(region_id, x, y)` and `(region_id)` via position
-   - Get/set/delete a component on an entity
-   - Iterate entities with a given component type (joined with `entities.destroyed_at_tick IS NULL`)
-6. **Sweep job stub** for hard-deleting entities where `destroyed_at_tick < (current_tick - retention_window)`. Wired but disabled by config until Layer 6 (audit log) can confirm no references exist.
+1. Migration: `entities` table with CHECK constraint and indexes.
+2. Migration: `entity_positions` table with indexes (no `region_id` FK yet — added in Layer 4).
+3. Migration: `components` table with composite PK and lookup index.
+4. Go types: `Entity`, `EntityPosition`, `ComponentRow`. Component-type registry as a typed enum in Go.
+5. `sqlc` queries for the three tables (insert entity, soft-delete entity, set/get/iterate components, upsert position, query positions in region).
+6. Sweep job stub for hard-deleting entities where `destroyed_at_tick < (current_tick - retention_window)`. Wired but disabled by config until Layer 6 (audit log) can confirm no references exist.
 
 ---
 
@@ -544,11 +534,11 @@ This layer puts flesh on the entity/component frame. It is the largest layer by 
 
 - **Characters** — designed; §7.2.
 - **Actors** — designed; §7.3.
-- **Items + Location component** — pending.
+- **Items + `item_templates` + `item_locations` + `item_properties`** — designed; §7.6.
 - **Corpses + death-and-loot flow** — pending.
 - **`action_costs` table** — pending.
 - **Projectile mechanics** (`Trajectory` component, impact resolution) — pending.
-- **Entity templates / prefabs** — pending.
+- **Remaining entity templates / prefabs** (beyond `item_templates`) — pending.
 
 ### 7.1 Refinements to the ECS-Hybrid Model
 
@@ -588,7 +578,7 @@ CREATE INDEX characters_hp_zero_idx
 
 Key decisions:
 
-- **`entity_id` is both PK and FK to `entities`.** A character is a subtype of entity. Cascade delete on entity destruction handles cleanup of the character row, position, components, and (later) actor row in one fall.
+- **`entity_id` is both PK and FK to `entities`.** A character is a subtype of entity. Cascade delete on entity destruction handles cleanup of the character row, position, components, and actor row in one fall.
 - **`account_id` and `season_id` denormalized** from the relationship through `entities.season_id`. Cheap, and makes "find this account's character" and "all characters this season" fast without joining `entities` first.
 - **`character_name` is distinct from `accounts.display_name`.** The account display name identifies the *player* persistently across seasons; the character name identifies the in-world *character* who will eventually die. Both are visible in-game. Death feed reads "Grimsnarl the Brave (Logan) was killed by a hill troll." One account display name maps to many character names over time.
 - **`character_name` uniqueness is per-season.** Within a season, no two living characters share a name — prevents in-game confusion. Across seasons, names recycle freely. No persistent claim table. Wipe clears character names along with characters.
@@ -633,34 +623,181 @@ Key decisions:
 
 ### 7.4 Layer 3 Piece 1 Commit Sequence (characters + actors)
 
-1. **Migration: create `characters` table** with indexes.
-2. **Migration: create `actors` table** with the partial scheduling index.
-3. **Go types**: `Character`, `Actor` structs with `sqlc`-friendly tagging.
-4. **`sqlc` queries for characters**:
+1. Migration: create `characters` table with indexes.
+2. Migration: create `actors` table with the partial scheduling index.
+3. Go types: `Character`, `Actor` structs with `sqlc`-friendly tagging.
+4. `sqlc` queries for characters:
    - Create character (in a transaction that also inserts the `entities` row, an `entity_positions` row, and an `actors` row).
    - Look up living character for an account in the current season.
    - Apply damage (UPDATE `characters` SET hp = hp - $1).
    - Mark character dead (set `died_at_tick` and `entities.destroyed_at_tick` in the same transaction; delete `entity_positions` row).
    - Query dead-but-not-yet-processed characters (`hp <= 0 AND died_at_tick IS NULL`) for the death sweep.
-5. **`sqlc` queries for actors**:
-   - Insert actor row at character/NPC/projectile creation.
-   - `MarkActorReady(entity_id, tick)` — sets `next_ready_tick`.
-   - Scheduler query — entities ready to act, ordered by `next_ready_tick`.
-   - Deduct energy and recompute `next_ready_tick` (or set NULL if energy is full and no pending intent).
-6. **Helper function in Go**: `MarkActorReady` is the single chokepoint for re-enabling scheduling. All intent-creation paths route through it.
+5. `sqlc` queries for actors:
+   - Insert actor row.
+   - Update `next_ready_tick` (the `MarkActorReady` primitive).
+   - Scheduler query — entities with `next_ready_tick <= $current_tick`, ordered.
+   - Deduct energy and recompute `next_ready_tick`.
+6. Character-creation transaction helper: builds on the Phase 2 entity-creation helper; creates `entities` row + `entity_positions` row + `actors` row + `characters` row, all in one transaction, all sharing the same `entity_id`.
+7. Death transaction helper: sets `died_at_tick` on `characters`, sets `destroyed_at_tick` on `entities`, deletes the `entity_positions` row, all in one transaction. Does not yet handle the corpse-and-inventory flow — that's a future piece of Layer 3.
+8. `MarkActorReady` helper function in Go: the single chokepoint for re-enabling actor scheduling per §7.3. Wraps the underlying `sqlc` query.
 
 ### 7.5 Explicitly Deferred from Layer 3 Piece 1
 
-- **Items + Location component** — next piece.
-- **Corpses + death-and-loot flow** — depends on items being concrete.
-- **`action_costs` table** — small piece, can come anytime after items.
-- **Projectile mechanics** (`Trajectory` component, impact resolution, lootable-on-miss) — own piece.
-- **Entity templates / prefabs** — own piece, debate over DB-table vs. file-based.
-- **Equipment slots** — likely a JSONB component initially; deferred until items exist.
-- **Status effects** (`OnFire`, `Poisoned`, `Stunned`, `Regenerating`) — components in the generic table; defined when systems need them.
-- **XP / level / skills** — combat-system concern, possibly post-MVP.
-- **Hunger, thirst, fatigue** — survival-system concern, post-MVP.
-- **Faction / alignment / reputation** — social-system concern, post-MVP.
+- **Equipment slots** — lean is JSONB component initially, promotable later. Designed when items + Location land.
+- **Status effect components** (`OnFire`, `Poisoned`, `Stunned`, `Regenerating`) — live in `components` per the §7.1 rule. Schema-wise nothing to add; designed at the point we add a specific effect.
+- **XP / level / skills** — might be post-MVP entirely. No schema work until the system is designed.
+- **Corpse-and-inventory flow** — own piece of Layer 3.
+- **Character spawn location logic** — application concern, not schema. Layer 4 (regions) provides the candidate spawn points.
+
+### 7.6 Items, Item Templates, Item Locations, and Item Properties
+
+Layer 3 piece 2. Items are the highest-volume mutable entity in the game and the substrate of the trade subsystem; the schema here favors runtime correctness (DB-level FK integrity, indexable queries) over uniformity with the generic-components pattern.
+
+#### 7.6.1 `item_templates`
+
+Content rows — the "designers create content as data, not code" piece from §2.4. Every item entity is an instance of a template.
+
+```sql
+CREATE TABLE item_templates (
+  template_key   TEXT PRIMARY KEY,                        -- e.g. 'longsword', 'health_potion_small'
+  name           TEXT NOT NULL,                           -- display name
+  base_stats     JSONB NOT NULL DEFAULT '{}'::jsonb,      -- damage, weight, max_stack, ...
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+Key decisions:
+
+- **TEXT primary key on `template_key`.** Templates are content, not runtime objects — human-meaningful, designer-authored, referenced from data files. The debuggability of raw `items` rows ("`template_id = 'longsword'`") outweighs the small join-cost win of an INT surrogate. UUIDs would add no value here.
+- **Global, not season-scoped.** No `season_id` column. Templates persist across wipes; each season can ship its own content set via data files. The §5.3 `seasons.modifiers` JSONB handles per-season balance changes without forking the template set. If genuinely-per-season templates ever matter, a nullable `season_id` can be added without breaking existing rows.
+- **`base_stats` validation is application-only.** The template loader is a single controlled code path that runs at startup and crashes loudly on bad data. CHECK constraints on JSONB shape would be a maintenance burden for a problem designers writing data files don't actually create.
+- **No `entity_type` discriminator on templates.** Item-ness is in the table name; subcategory (weapon vs. armor vs. consumable) lives inside `base_stats` and is interpreted by Go code.
+
+#### 7.6.2 `items`
+
+The per-type core attributes for item entities. Three columns — everything else lives on `entities`, `item_templates`, `item_locations`, `item_properties`, `components`, or the audit log.
+
+```sql
+CREATE TABLE items (
+  entity_id     UUID PRIMARY KEY REFERENCES entities(id) ON DELETE CASCADE,
+  template_id   TEXT NOT NULL REFERENCES item_templates(template_key),
+  stack_count   INT NOT NULL DEFAULT 1 CHECK (stack_count > 0)
+);
+
+CREATE INDEX items_template_idx ON items (template_id);
+```
+
+Key decisions:
+
+- **`entity_id` PK-and-FK to `entities`.** Same pattern as `characters`. Cascade delete is clean.
+- **`template_id` is the FK to `item_templates(template_key)`.** TEXT FK; small index, hot in cache.
+- **`stack_count` on day one as a column.** Stackable items (arrows, gold, potions) are core to roguelike inventory; modeling 30 arrows as 30 entity rows is absurd. A column is cheaper to read on every item operation than a component join. Non-stackable items default to `stack_count = 1`. The `CHECK (stack_count > 0)` prevents zero-or-negative stacks; max stack size is a template property, enforced in application code at merge time.
+- **Auto-merge on pickup within a container.** Application-logic rule, not a schema constraint. No `(character_id, template_id)` unique index — that would reject transient duplicates during multi-step trade operations. The DB doesn't editorialize on merge timing; the application owns it.
+- **No item-level timestamps.** `entities.created_at_tick` and `entities.destroyed_at_tick` already cover the lifecycle. Item-history forensics live in the audit log.
+- **No `durability`, `enchantment_level`, `name_override`, or `bound_to_account` columns.** Each is either a `item_properties` row (durability, enchantment) or a component (soulbinding, custom name) if it ever ships.
+
+#### 7.6.3 `item_locations`
+
+Promoted from the generic `components` table on day one — the §7.1 promotion rule applies hard here. Items are the highest-volume mutable entity; the trade subsystem is the hardest atomic operation; item provenance is a cheating-defense surface. FK integrity, indexable queries, and atomic UPDATEs all justify the dedicated table.
+
+```sql
+CREATE TABLE item_locations (
+  item_id        UUID PRIMARY KEY REFERENCES items(entity_id) ON DELETE CASCADE,
+  character_id   UUID REFERENCES entities(id) ON DELETE CASCADE,
+  corpse_id      UUID REFERENCES entities(id) ON DELETE CASCADE,
+  region_id      INT,                       -- FK added in Layer 4
+  x              INT,
+  y              INT,
+  updated_at_tick BIGINT NOT NULL,
+  CHECK (
+    (
+      (character_id IS NOT NULL)::int +
+      (corpse_id IS NOT NULL)::int +
+      (region_id IS NOT NULL)::int
+    ) = 1
+    AND (region_id IS NULL OR (x IS NOT NULL AND y IS NOT NULL))
+    AND (region_id IS NOT NULL OR (x IS NULL AND y IS NULL))
+  )
+);
+
+CREATE INDEX item_locations_character_idx
+  ON item_locations (character_id) WHERE character_id IS NOT NULL;
+
+CREATE INDEX item_locations_corpse_idx
+  ON item_locations (corpse_id) WHERE corpse_id IS NOT NULL;
+
+CREATE INDEX item_locations_region_xy_idx
+  ON item_locations (region_id, x, y) WHERE region_id IS NOT NULL;
+```
+
+Key decisions:
+
+- **Day-one variant set: `InInventoryOf`, `OnCorpse`, `OnGroundAt`.** Three nullable column groups, governed by a CHECK constraint that enforces exactly one is set. `InEscrow(trade_id)` and `InShopStock(shop_id)` are deferred to the subsystems that need them (Layer 5 for trades; whenever shops get designed).
+- **CHECK enforces both "exactly one variant" and "position pair integrity."** `(region_id IS NULL) = (x IS NULL AND y IS NULL)` — if `OnGroundAt` is the variant, all three position fields are required; otherwise none of them are set.
+- **FK targets are `entities(id)`, filtered by `entity_type` in application code.** Postgres FKs can't enforce "character_id must point at an entity of type character." This is accepted, not enforced — the audit log catches anomalies, and a trigger on every item move would be too costly on the hottest write path in the game. Application code is the source of truth.
+- **`region_id` FK to `regions(id)`** is deferred to Layer 4, same pattern as `entity_positions.region_id`.
+- **Partial indexes per variant.** "Show me this character's inventory" is `WHERE character_id = $1` — a clean index scan. "What's at (x,y) in region R" likewise. No JSONB expression scans.
+- **Cascade deletes on all three FK targets.** When a character is hard-deleted, their inventory rows go. When a corpse decays and is destroyed, its items' location rows go (followed by application logic that decides whether the items themselves transition to `OnGroundAt` at the corpse's tile or are destroyed with the corpse — corpse-piece design).
+- **`updated_at_tick`** for broadcast debouncing, trade verification, and forensic queries.
+- **Trade atomicity preview:** moving items between owners is a single statement — `UPDATE item_locations SET character_id = $new WHERE item_id = ANY($ids) AND character_id = $old`. The FK validates the new owner exists; the WHERE clause validates the previous state; the row count confirms success. The DB does the integrity work that would otherwise be in Go.
+
+#### 7.6.4 `item_properties`
+
+Procedurally-generated, per-instance properties — the "+2 sword of fire" or "rusted leather boots" data. Rows in a child table, one row per property.
+
+```sql
+CREATE TABLE item_properties (
+  item_id          UUID NOT NULL REFERENCES items(entity_id) ON DELETE CASCADE,
+  property_type    TEXT NOT NULL,                         -- 'enchantment', 'material', 'durability', ...
+  property_value   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (item_id, property_type)
+);
+
+CREATE INDEX item_properties_type_idx
+  ON item_properties (property_type);
+
+CREATE INDEX item_properties_type_value_idx
+  ON item_properties (property_type, (property_value->>'kind'));
+```
+
+Key decisions:
+
+- **Child table, not JSONB on `items` and not generic-component rows.** Driven by anticipated case-2 query patterns: "find all flaming weapons in region X," "count cursed items in circulation," "find all items with durability below 10% in this character's inventory." JSONB on `items` would force GIN indexes with unpredictable plans; the generic `components` table can answer "all entities with EnchantmentComponent" but not "all entities with EnchantmentComponent where the kind is fire" without falling back to JSONB pathing.
+- **`(item_id, property_type)` composite PK.** An item has at most one of each property type. Two enchantments on one sword would be a redesign decision, not a data shape issue — components is the escape hatch if multi-instance properties ever matter.
+- **`property_value` as JSONB.** Property *kind* (`property_type`) is the indexed axis; *value* varies in shape per kind and rarely needs to be queried across items. `{"kind": "fire", "magnitude": 2}` for an enchantment; `{"current": 87, "max": 100}` for durability.
+- **Index on `(property_type, property_value->>'kind')`.** Supports the "find all flaming weapons" class of query directly. Other case-2 queries that need finer slicing can add specific expression indexes when the need is real.
+- **Cascade delete on item destruction.** Properties follow the item.
+- **No timestamps.** Properties change at well-known points (durability decay event, enchantment cast, item identification); the audit log captures those events. No need for per-row write timestamps.
+- **Application owns shape validation.** A `property_type` is meaningful to Go code; the schema doesn't enforce that durability has a `current` field. Same rationale as `item_templates.base_stats`.
+
+#### 7.6.5 Layer 3 Piece 2 Commit Sequence
+
+1. Migration: create `item_templates` table.
+2. Migration: create `items` table (FK to `item_templates` and `entities`).
+3. Migration: create `item_locations` table with CHECK constraint and partial indexes.
+4. Migration: create `item_properties` table with the `(property_type, kind)` expression index.
+5. Go types: `ItemTemplate`, `Item`, `ItemLocation`, `ItemProperty`. A typed enum for `property_type`. A `LocationVariant` discriminated union in Go that maps to/from the nullable-column representation.
+6. Template loader: reads designer-authored data files (TOML/YAML/JSON) at startup, upserts `item_templates` rows, validates `base_stats` shape per category, crashes loudly on bad input.
+7. `sqlc` queries for items:
+   - Create item (in a transaction that also inserts the `entities` row, the `item_locations` row, and any initial `item_properties` rows).
+   - Look up item with its location and properties (one transaction, three queries — or a single join).
+   - Move item to new location (UPDATE `item_locations` with the variant-appropriate columns, in one statement).
+   - Increment/decrement stack count.
+   - Destroy item (sets `entities.destroyed_at_tick`; cascade handles the rest).
+   - Inventory query — items in a character's inventory, joined with templates and properties.
+   - Ground query — items at `(region_id, x, y)`.
+   - Property query — "all items where property_type = X and value->>'kind' = Y" — case-2 access pattern.
+8. Item-creation transaction helper in Go: parallel to the character helper, builds the entity + items + item_locations + initial item_properties in one transaction.
+9. Stack-merge helper in Go: on pickup, check if the receiving container already has a stack of this template; if so, increment the existing stack and destroy the picked-up item entity (cascade clears the location and properties — fine, since stack merging on identical templates means properties were either identical or absent). The application owns this rule; the DB doesn't enforce it.
+
+#### 7.6.6 Explicitly Deferred from Layer 3 Piece 2
+
+- **`InEscrow(trade_id)` Location variant.** Arrives with Layer 5: one ALTER TABLE adding `trade_id`, one rewrite of the CHECK constraint adding the variant. The migration can be tested end-to-end against real trade code at that point, which is the right time to design it.
+- **`InShopStock(shop_id)` Location variant.** Arrives when shops get a design conversation.
+- **FK from `item_locations.region_id` to `regions(id)`.** Added in Layer 4, same pattern as `entity_positions`.
+- **Soulbinding, custom name overrides, per-instance condition beyond what `item_properties` covers.** Added as components or properties when the corresponding game mechanic is designed.
+- **DB-level enforcement that `character_id` references a character-type entity and `corpse_id` references a corpse-type entity.** Application-enforced. Audit log is the backstop.
+- **Multi-instance properties on a single item** (two enchantments on one sword). The composite PK prevents this by design; redesign if the game mechanic ever demands it.
 
 ---
 
@@ -670,9 +807,9 @@ The schema work is structured as six layers. Each is a natural conversation and 
 
 1. **The frame** — accounts, seasons, sessions, moderation. *(designed; §5)*
 2. **Entities and components** — the shared "thing in the world" abstraction. *(designed; §6)*
-3. **Characters and items** — most-trafficked entity subtypes. *(in progress; §7. Characters and actors designed. Items + Location, corpses, action_costs, projectile mechanics, templates pending.)*
-4. **World structure** — regions, tiles, world generation, spatial indexing. Adds the `entity_positions.region_id` FK.
-5. **Trades** — the hardest atomic operation, its own table family.
+3. **Characters and items** — most-trafficked entity subtypes; inventories, ownership, death-and-corpse flow, `Actor` component, `Location` component, `action_costs`, projectile mechanics. *(in progress; §7 — pieces 1 and 2 designed; corpses, `action_costs`, projectile mechanics, broader templates pending)*
+4. **World structure** — regions, tiles, world generation, spatial indexing. Adds the `entity_positions.region_id` and `item_locations.region_id` FKs.
+5. **Trades** — the hardest atomic operation, its own table family. Adds the `InEscrow` Location variant.
 6. **Audit log and chat** — append-only, partitioned, forensic-ready.
 
 ---
@@ -716,3 +853,4 @@ Captured here so they don't get lost. Not blocking near-term work.
 - **2026-05-15 (initial)** — Initial document. Layer 1 (the frame) designed. Conceptual model, multiplayer design decisions, database choice, and ECS-hybrid runtime model locked in. Working title set to "Walking Drum."
 - **2026-05-15 (Layer 2)** — Time system established (§2.5): energy-based, server-driven, tick rate as network-layer concern, action costs as gameplay data, game-tick as source of truth for in-world time. Layer 2 (entities and components) designed (§6): `entities` table with six-type taxonomy including `projectile`, `entity_positions` as a sparse dedicated table, `components` as generic JSONB. ECS philosophy clarified as hybrid — compositional thinking, normalized storage where it pays. Layer numbering updated; remaining layers shifted accordingly.
 - **2026-05-16 (Layer 3 — piece 1: characters and actors)** — First piece of Layer 3 designed (§7). ECS-hybrid model refined (§7.1) with two rules: promotion-on-day-one is acceptable when §4.3 criteria are met immediately; defining state is core, modifying effects are components. `characters` table defined (§7.2) with HP as columns (not a Health component), `character_name` distinct from account display name, character names unique per-season, and partial indexes for the active-character lookup and death-detection hot paths. `actors` table defined (§7.3) as a day-one promotion with `next_ready_tick` nullable as the "not scheduled" off-switch, partial index keeping the scheduler query cheap. Remaining Layer 3 pieces (items + Location, corpses, action_costs, projectile mechanics, templates) deferred to follow-up conversations.
+- **2026-05-16 (Layer 3 — piece 2: items and locations)** — Items, item templates, item locations, and item properties designed (§7.6). `item_locations` chosen as a dedicated table over a tagged-union JSONB component, with day-one variants `InInventoryOf`, `OnGroundAt`, and `OnCorpse` and a CHECK constraint enforcing exactly one is set plus position-pair integrity. `item_templates` global with TEXT primary key on `template_key`; application-level validation of `base_stats`. `items` core columns settled at three: `entity_id`, `template_id`, `stack_count`. Stacking day-one with auto-merge as an application rule (no DB-level uniqueness constraint). `item_properties` chosen as a dedicated child table (over JSONB on items or rows in generic components), driven by anticipated case-2 query patterns. `InEscrow` and `InShopStock` Location variants deferred to their respective subsystems. `item_locations.region_id` lands without an FK; FK added in Layer 4.
