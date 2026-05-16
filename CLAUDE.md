@@ -26,7 +26,7 @@ go mod tidy
 go build ./...
 ```
 
-`goose` and `sqlc` are listed in Phase 0 but not yet installed/configured — when adding them, follow the design doc choices (`goose` for migrations, `sqlc` for query generation, generated code under `internal/db/` or similar).
+`goose` is wired in as a Go-1.24 `tool` dependency (`go.mod`), invoke as `go tool goose ...`. To avoid passing `-dir migrations postgres "$DATABASE_URL"` every time, set `GOOSE_DRIVER=postgres`, `GOOSE_DBSTRING=$DATABASE_URL`, `GOOSE_MIGRATION_DIR=migrations` in `.env`. Migrations live in `migrations/` with goose-style annotated SQL (`-- +goose Up` / `-- +goose Down`), sequentially numbered (`00001_init.sql`, `00002_...`). `sqlc` is listed for Phase 0 but not yet installed — generated code will land under `internal/db/` or similar per the design doc.
 
 `.env` is loaded by `cmd/main.go` via `internal/envfile`. Shell-set vars always win over `.env`. Required key: `DATABASE_URL`. `docker-compose.yml` also reads `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` from the environment.
 
