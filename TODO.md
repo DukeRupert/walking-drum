@@ -22,7 +22,7 @@ Per §5.8 of the design doc.
 - [x] `sqlc` queries for accounts — create account, look up by email, look up by id, update status, soft-delete
 - [x] Migration: `seasons` + `season_participation` tables, including the unique partial index for "one active season at a time" and a seed migration creating season 1 with placeholder dates and seed
 - [x] `sqlc` queries for seasons — get active season, get season by id, advance season status (`upcoming` → `active` → `ended`)
-- [ ] Migration: `sessions` table, including both partial indexes
+- [x] Migration: `sessions` table, including both partial indexes
 - [ ] `sqlc` queries for sessions — create session, look up by token hash, revoke session, list active sessions for an account
 - [ ] Migration: `moderation_actions` table, including both indexes
 - [ ] `sqlc` queries for moderation — append action, list actions for an account, find currently-active suspensions/bans
