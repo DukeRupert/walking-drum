@@ -36,7 +36,7 @@ Per §5.8 of the design doc.
 
 Per §6.6 of the design doc.
 
-- [ ] Migration: `entities` table with CHECK constraint listing the six entity types and both indexes (no FKs to it from other tables yet)
+- [x] Migration: `entities` table with CHECK constraint listing the six entity types and both indexes (no FKs to it from other tables yet)
 - [ ] Migration: `entity_positions` table — `region_id` as plain `INT NOT NULL`, no FK yet, both indexes
 - [ ] Migration: `components` table with the reverse-direction index `(component_type, entity_id)`
 - [ ] Go types in `internal/game/` (or similar) — `Entity` struct, `Position` struct, `Component` interface or marker type, UUIDv7 generation helper (use `github.com/google/uuid` v1.6+ or a dedicated UUIDv7 lib)
