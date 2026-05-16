@@ -30,3 +30,12 @@ SELECT * FROM entities
 WHERE season_id = $1
   AND entity_type = $2
   AND destroyed_at_tick IS NULL;
+
+-- name: SweepDestroyedEntities :execrows
+-- Hard-deletes entities that have been soft-deleted longer than the
+-- retention window. Cascading FKs (entity_positions, components, etc.)
+-- carry the deletion through. Returns rows affected so the caller can
+-- log/alert. Gated by config in the Go wrapper — see DESIGN.md §6.6.
+DELETE FROM entities
+WHERE destroyed_at_tick IS NOT NULL
+  AND destroyed_at_tick < $1;

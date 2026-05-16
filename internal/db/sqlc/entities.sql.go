@@ -134,3 +134,21 @@ func (q *Queries) SoftDeleteEntity(ctx context.Context, arg SoftDeleteEntityPara
 	)
 	return i, err
 }
+
+const sweepDestroyedEntities = `-- name: SweepDestroyedEntities :execrows
+DELETE FROM entities
+WHERE destroyed_at_tick IS NOT NULL
+  AND destroyed_at_tick < $1
+`
+
+// Hard-deletes entities that have been soft-deleted longer than the
+// retention window. Cascading FKs (entity_positions, components, etc.)
+// carry the deletion through. Returns rows affected so the caller can
+// log/alert. Gated by config in the Go wrapper — see DESIGN.md §6.6.
+func (q *Queries) SweepDestroyedEntities(ctx context.Context, destroyedAtTick *int64) (int64, error) {
+	result, err := q.db.Exec(ctx, sweepDestroyedEntities, destroyedAtTick)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
