@@ -26,7 +26,7 @@ go mod tidy
 go build ./...
 ```
 
-`goose` is wired in as a Go-1.24 `tool` dependency (`go.mod`), invoke as `go tool goose ...`. To avoid passing `-dir migrations postgres "$DATABASE_URL"` every time, set `GOOSE_DRIVER=postgres`, `GOOSE_DBSTRING=$DATABASE_URL`, `GOOSE_MIGRATION_DIR=migrations` in `.env`. Migrations live in `migrations/` with goose-style annotated SQL (`-- +goose Up` / `-- +goose Down`), sequentially numbered (`00001_init.sql`, `00002_...`). `sqlc` is listed for Phase 0 but not yet installed — generated code will land under `internal/db/` or similar per the design doc.
+`goose` and `sqlc` are wired in as Go-1.24 `tool` dependencies (`go.mod`); invoke as `go tool goose ...` / `go tool sqlc generate`. To avoid passing `-dir migrations postgres "$DATABASE_URL"` to goose every time, set `GOOSE_DRIVER=postgres`, `GOOSE_DBSTRING=$DATABASE_URL`, `GOOSE_MIGRATION_DIR=migrations` in `.env`. Migrations live in `migrations/` with goose-style annotated SQL (`-- +goose Up` / `-- +goose Down`), sequentially numbered (`00001_init.sql`, `00002_...`). Query files live in `queries/`; `sqlc.yaml` reads schema from `migrations/` and writes generated Go to `internal/db/sqlc/` (package `sqlc`, pgx/v5 backend). Generated code is checked in — run `go tool sqlc generate` after editing queries or schema.
 
 `.env` is loaded by `cmd/main.go` via `internal/envfile`. Shell-set vars always win over `.env`. Required key: `DATABASE_URL`. `docker-compose.yml` also reads `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` from the environment.
 
