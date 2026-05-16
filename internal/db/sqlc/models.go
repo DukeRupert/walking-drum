@@ -5,6 +5,8 @@
 package sqlc
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -48,4 +50,17 @@ type SeasonParticipation struct {
 	Deaths         int32
 	DeepestRegion  *int32
 	FinalSummary   []byte
+}
+
+type Session struct {
+	ID           pgtype.UUID
+	AccountID    pgtype.UUID
+	TokenHash    string
+	IpAddress    *netip.Addr
+	UserAgent    *string
+	CreatedAt    pgtype.Timestamptz
+	LastSeenAt   pgtype.Timestamptz
+	ExpiresAt    pgtype.Timestamptz
+	RevokedAt    pgtype.Timestamptz
+	RevokeReason *string
 }
