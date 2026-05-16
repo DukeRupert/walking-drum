@@ -42,7 +42,7 @@ Per §6.6 of the design doc.
 - [x] Go types in `internal/game/` (or similar) — `Entity` struct, `Position` struct, `Component` interface or marker type, UUIDv7 generation helper (use `github.com/google/uuid` v1.6+ or a dedicated UUIDv7 lib)
 - [x] First concrete component as smoke test — something cheap and marker-shaped (`Hidden{}` or `Persistent{}`); define the typed Go struct, write the JSONB serialization round-trip test
 - [x] `sqlc` queries for entities — create entity (just the row), look up by ID, soft-delete (set `destroyed_at_tick`), list by `(season_id, entity_type)` filter
-- [ ] `sqlc` queries for entity_positions — set position (upsert), get position by entity_id, delete position by entity_id, query entities at `(region_id, x, y)`, query entities in region
+- [x] `sqlc` queries for entity_positions — set position (upsert), get position by entity_id, delete position by entity_id, query entities at `(region_id, x, y)`, query entities in region
 - [ ] `sqlc` queries for components — set component (upsert keyed on `(entity_id, component_type)`), get component, delete component, iterate entities with a given component type (joined to `entities.destroyed_at_tick IS NULL`)
 - [ ] Transactional entity-creation helper in Go — given a season, type, optional position, and optional initial components, creates the entity row + position row + component rows in a single transaction
 - [ ] Sweep job stub — hard-deletes entities where `destroyed_at_tick < (current_tick - retention_window)`, wired but gated by config flag, disabled by default until Layer 6 is real
