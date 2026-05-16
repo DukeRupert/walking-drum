@@ -31,6 +31,17 @@ type AccountFlag struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type ModerationAction struct {
+	ID         pgtype.UUID
+	AccountID  pgtype.UUID
+	ActionType string
+	Reason     string
+	Details    []byte
+	AppliedBy  pgtype.UUID
+	AppliedAt  pgtype.Timestamptz
+	ExpiresAt  pgtype.Timestamptz
+}
+
 type Season struct {
 	ID        int32
 	Name      *string
