@@ -26,9 +26,9 @@ Per §5.8 of the design doc.
 - [x] `sqlc` queries for sessions — create session, look up by token hash, revoke session, list active sessions for an account
 - [x] Migration: `moderation_actions` table, including both indexes
 - [x] `sqlc` queries for moderation — append action, list actions for an account, find currently-active suspensions/bans
-- [ ] Auth helper layer (not yet HTTP) — `bcrypt` wrapper for password hashing, token generator (random bytes → hash for storage), session-creation function taking an account and producing a session row
+- [x] Auth helper layer (not yet HTTP) — `bcrypt` wrapper for password hashing, token generator (random bytes → hash for storage), session-creation function taking an account and producing a session row
 
-**Done when:** a small Go program can create an account, create a session, validate the session token, and revoke it.
+**Done when:** a small Go program can create an account, create a session, validate the session token, and revoke it. ✅
 
 ---
 
